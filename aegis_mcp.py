@@ -1,4 +1,4 @@
-"""AEGIS Academic Integrity MCP Server — FastMCP edition.
+r"""AEGIS Academic Integrity MCP Server — FastMCP edition.
 
 Compatible with mcp >= 1.0.0. Uses FastMCP for zero-boilerplate stdio transport.
 Run with: C:\Gitrepos\aegis-integrity\.venv\Scripts\python.exe aegis_mcp.py
@@ -27,31 +27,53 @@ mcp = FastMCP("aegis-integrity")
 
 
 def _run(args: list[str], timeout: int = 300) -> str:
-    """Run aegis CLI and return output."""
+    """Run aegis CLI and return output.
+
+    Hardened (2026-07-15) after repeated timeout hangs:
+    - stdin=DEVNULL so the child can never block on (or consume) the MCP stdio pipe
+    - taskkill /T on timeout so the python grandchild spawned by aegis.exe cannot
+      be orphaned mid model-download and hold HuggingFace cache locks
+    - progress bars disabled; they flood the captured pipe during model downloads
+    """
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+    env.setdefault("TQDM_DISABLE", "1")
+    proc = subprocess.Popen(
+        [str(AEGIS_EXE)] + args,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL, text=True,
+        encoding="utf-8", errors="replace", env=env,
+    )
     try:
-        result = subprocess.run(
-            [str(AEGIS_EXE)] + args,
-            capture_output=True, text=True, timeout=timeout,
-            encoding="utf-8", errors="replace", env=os.environ.copy(),
+        out, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        subprocess.run(
+            ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+            capture_output=True,
         )
-    except subprocess.TimeoutExpired as ex:
-        partial = (ex.stdout or "").strip() if isinstance(ex.stdout, str) else ""
+        partial = ""
+        try:
+            partial, _ = proc.communicate(timeout=10)
+            partial = (partial or "").strip()
+        except Exception:
+            pass
         msg = (
-            f"AEGIS analysis timed out after {timeout}s and was terminated.\n"
-            "This usually means the paper has a large reference list and citation "
-            "verification against Crossref/OpenAlex is slow, or the AI-detection "
-            "model is still downloading on first run.\n"
-            "Try again with skip_citations=True or skip_ai_detection=True to "
-            "isolate the slow stage, or re-run (models are cached after first use)."
+            f"AEGIS analysis timed out after {timeout}s; the whole process tree was terminated.\n"
+            "Most common cause: first-run model download (GPT-2 ~550MB + SBERT) from "
+            "HuggingFace on an unauthenticated connection. Models are cached after one "
+            "successful run, so simply re-running usually succeeds. To pre-warm the cache "
+            "outside the MCP timeout, run once from a shell:\n"
+            f'  "{AEGIS_EXE}" analyze <paper> --no-citations\n'
+            "You can also set HF_TOKEN in C:\\Gitrepos\\aegis-integrity\\.env for faster downloads."
         )
         if partial:
             msg += f"\n\nPartial output before timeout:\n{partial[-2000:]}"
         return msg
-    out = result.stdout.strip()
-    if result.returncode != 0 and result.stderr.strip():
-        out = (out + "\nSTDERR:\n" + result.stderr.strip()).strip()
+    out = (out or "").strip()
+    if proc.returncode != 0:
+        out = (out + f"\n(exit code {proc.returncode})").strip()
     return out or "(no output)"
 
 
@@ -92,7 +114,7 @@ def aegis_analyze_paper(
     if skip_citations:
         args.append("--no-citations")
 
-    output = _run(args, timeout=600)
+    output = _run(args, timeout=900)
     if Path(json_out).exists():
         output += f"\n\nReport saved to: {json_out}"
     return output
@@ -109,7 +131,7 @@ def aegis_compare_papers(file1: str, file2: str) -> str:
         file1: Absolute path to the first paper.
         file2: Absolute path to the second paper.
     """
-    return _run(["compare", file1, file2], timeout=600)
+    return _run(["compare", file1, file2], timeout=900)
 
 
 @mcp.tool()
@@ -130,7 +152,7 @@ def aegis_check_citations(file_path: str) -> str:
         "--no-ai", "--no-semantic", "--no-stylometric", "--no-self-plagiarism",
         "--output", json_out,
     ]
-    return _run(args, timeout=120)
+    return _run(args, timeout=300)
 
 
 @mcp.tool()
