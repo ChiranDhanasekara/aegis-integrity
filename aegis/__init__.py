@@ -1,6 +1,5 @@
 """
 AEGIS -- Academic Integrity Engine with Generative-AI Scrutiny
-Version 1.0.0
 
 An open-source academic integrity analysis tool that fills critical gaps
 in existing plagiarism detection tools:
@@ -18,5 +17,5 @@ Authors: Sunil Gentyala, Rakesh Prakash, Akhila Kasturi
 License: MIT
 """
 
-__version__ = "1.0.0"
+__version__ = "2.1.0"
 __author__ = "Sunil Gentyala"

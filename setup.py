@@ -1,8 +1,17 @@
+import re
+from pathlib import Path
 from setuptools import setup, find_packages
+
+_version_match = re.search(
+    r'^__version__\s*=\s*"([^"]+)"',
+    Path(__file__).parent.joinpath("aegis", "__init__.py").read_text(encoding="utf-8"),
+    re.MULTILINE,
+)
+VERSION = _version_match.group(1)
 
 setup(
     name="aegis-integrity",
-    version="2.1.0",
+    version=VERSION,
     description=(
         "Open-source, offline, bias-aware academic integrity checker: "
         "plagiarism, AI content detection, LLM watermark detection, "

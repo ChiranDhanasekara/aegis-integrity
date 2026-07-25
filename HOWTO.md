@@ -695,8 +695,6 @@ pip install PyMuPDF
 ### `aegis` command not found after `pip install -e .`
 
 ```bash
-python -m aegis --version
-# or
 python -m aegis.cli --version
 ```
 

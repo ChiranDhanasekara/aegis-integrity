@@ -37,6 +37,8 @@ from rich.table import Table
 from rich.panel import Panel
 from rich import box
 
+from aegis import __version__ as AEGIS_VERSION
+
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
@@ -53,7 +55,7 @@ RISK_COLORS = {
 
 
 @click.group()
-@click.version_option("2.1.0", prog_name="aegis")
+@click.version_option(AEGIS_VERSION, prog_name="aegis")
 def cli():
     """AEGIS Academic Integrity Checker -- open-source, bias-aware plagiarism analysis."""
 
