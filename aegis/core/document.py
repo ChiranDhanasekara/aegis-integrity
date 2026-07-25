@@ -227,11 +227,15 @@ class DocumentParser:
                                      re.DOTALL)
         for m in bibitem_pattern.finditer(raw):
             key = m.group(1).strip()
-            text = self._clean_latex(m.group(2)).strip()
+            raw_body = m.group(2)
+            text = self._clean_latex(raw_body).strip()
             doi = self._extract_doi(text)
+            # Extract title from TeX backtick quotes ``...'' before cleaning
+            title_m = re.search(r"``(.+?)''", raw_body, re.DOTALL)
+            title = self._clean_latex(title_m.group(1)).strip() if title_m else None
             refs.append(ParsedReference(
                 raw=text, authors=[], year=self._extract_year(text),
-                title=None, doi=doi, url=None, journal=None,
+                title=title, doi=doi, url=None, journal=None,
                 cite_key=key, line_number=None,
             ))
         return refs
