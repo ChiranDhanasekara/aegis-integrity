@@ -21,12 +21,14 @@ Usage examples:
     # Direct pairwise comparison (self-plagiarism check):
     aegis compare journal_version.pdf conference_version.pdf
 
+    # Batch / classroom analysis (essay mill detection):
+    aegis batch ./submissions/ --html batch_report.html
+
     # Start the REST API server:
     aegis serve --host 0.0.0.0 --port 8000
 """
 
 from __future__ import annotations
-import os
 import json
 import sys
 from pathlib import Path
@@ -98,7 +100,6 @@ def analyze(
 ):
     """Run the full AEGIS analysis on SUBMISSION (PDF, DOCX, TEX, or TXT)."""
     from aegis.core.pipeline import AEGISPipeline, PipelineConfig
-    from aegis.core.document import DocumentParser
     from aegis.corpus.indexer import CorpusIndexer
     from aegis.detectors.watermark_detector import WatermarkMode
     from aegis.report.generator import ReportGenerator
@@ -234,6 +235,98 @@ def compare(doc_a, doc_b, label_a, label_b, no_sbert):
                 p.source_text[:80],
             )
         console.print(t)
+
+
+# ---------------------------------------------------------------------------
+# batch
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.argument("directory", type=click.Path(exists=True, file_okay=False))
+@click.option("--pattern", default="*.pdf", show_default=True,
+              help="File glob for documents to include in the batch.")
+@click.option("--no-ai", is_flag=True,
+              help="Skip per-document AI scoring (faster; disables the "
+                   "high-AI-score cluster signal).")
+@click.option("--device", default="cpu", show_default=True,
+              help="PyTorch device for AI scoring (cpu / cuda).")
+@click.option("--json", "output_json", default=None, type=click.Path(),
+              help="Write JSON report to this path.")
+@click.option("--html", "output_html", default=None, type=click.Path(),
+              help="Write HTML report to this path.")
+def batch(directory, pattern, no_ai, device, output_json, output_html):
+    """Cross-document essay-mill / classroom analysis over all files
+    matching PATTERN in DIRECTORY."""
+    from dataclasses import asdict
+    from aegis.core.document import DocumentParser
+    from aegis.detectors.batch_analyzer import BatchAnalyzer
+    from aegis.report.generator import ReportGenerator
+
+    parser = DocumentParser()
+    paths = sorted(Path(directory).rglob(pattern))
+    if len(paths) < 2:
+        console.print(f"[red]Need at least 2 files matching '{pattern}' in "
+                      f"{directory}; found {len(paths)}.[/]")
+        sys.exit(1)
+
+    doc_names, doc_texts = [], []
+    for p in paths:
+        try:
+            doc_names.append(p.stem)
+            doc_texts.append(parser.parse(str(p)).full_text)
+        except Exception as exc:
+            console.print(f"[yellow]Warning:[/] Could not parse {p}: {exc}")
+
+    ai_scores = None
+    if not no_ai:
+        try:
+            from aegis.detectors.ai_detector import AIContentDetector
+            det = AIContentDetector(device=device)
+            console.print(f"Scoring {len(doc_texts)} document(s) for AI content...")
+            ai_scores = [det.detect(t).document_ensemble_score for t in doc_texts]
+        except ImportError:
+            console.print("[yellow]Warning:[/] transformers/torch not installed; "
+                           "skipping AI-score clustering (use --no-ai to silence this).")
+
+    console.print(f"Analyzing {len(doc_texts)} submission(s) as a batch...")
+    result = BatchAnalyzer().analyze(doc_names, doc_texts, ai_scores=ai_scores)
+
+    risk_color = RISK_COLORS.get(result.overall_risk, "white")
+    console.print(Panel(
+        f"[bold {risk_color}]Overall Risk: {result.overall_risk}[/bold {risk_color}]\n"
+        f"Submissions: {result.submission_count}  |  "
+        f"Suspicious pairs: {len(result.suspicious_pairs)}  |  "
+        f"Clusters: {len(result.cluster_groups)}",
+        title="AEGIS Batch Result",
+    ))
+
+    if result.flags:
+        console.print("[bold]Flags:[/]")
+        for flag in result.flags:
+            console.print(f"  [yellow]•[/] {flag}")
+
+    if result.suspicious_pairs:
+        t = Table("Doc A", "Doc B", "N-gram", "Vocab", "Sections", "Combined",
+                  box=box.SIMPLE)
+        for p in result.suspicious_pairs[:15]:
+            t.add_row(p.doc_a, p.doc_b, f"{p.ngram_similarity:.3f}",
+                       f"{p.vocab_overlap:.3f}", f"{p.section_sequence_match:.3f}",
+                       f"{p.combined_score:.3f}")
+        console.print(t)
+
+    if output_json:
+        Path(output_json).parent.mkdir(parents=True, exist_ok=True)
+        with open(output_json, "w", encoding="utf-8") as f:
+            json.dump(asdict(result), f, indent=2, ensure_ascii=False)
+        console.print(f"\nJSON report: [cyan]{output_json}[/]")
+
+    if output_html:
+        rdir = str(Path(output_html).parent) if Path(output_html).parent != Path("") else "."
+        reporter = ReportGenerator(rdir)
+        path = reporter.generate_batch_html(result, Path(output_html).name)
+        console.print(f"HTML report: [cyan]{path}[/]")
+
+    sys.exit(0 if result.overall_risk in ("LOW", "MEDIUM") else 1)
 
 
 # ---------------------------------------------------------------------------

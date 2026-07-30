@@ -24,7 +24,7 @@ Features extracted per text segment:
 from __future__ import annotations
 import re
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 from collections import Counter
 
@@ -139,7 +139,7 @@ class StylometricAnalyzer:
                      if len(s.split()) > 2]
         avg_len = sum(sent_lens) / len(sent_lens) if sent_lens else 0.0
         std_len = math.sqrt(
-            sum((l - avg_len)**2 for l in sent_lens) / len(sent_lens)
+            sum((ln - avg_len)**2 for ln in sent_lens) / len(sent_lens)
         ) if len(sent_lens) > 1 else 0.0
 
         # TTR and hapax

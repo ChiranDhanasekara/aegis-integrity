@@ -6,7 +6,6 @@ Run with: C:\Gitrepos\aegis-integrity\.venv\Scripts\python.exe aegis_mcp.py
 
 import os
 import subprocess
-import asyncio
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 

@@ -1,7 +1,7 @@
 # AEGIS Academic Integrity Checker
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.1-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.0-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/offline-first-orange?style=for-the-badge" alt="Offline">
@@ -10,8 +10,9 @@
 </p>
 
 > **Open-source, offline, bias-aware academic integrity analysis.**
-> No data sent to third-party services. Runs entirely on your hardware after first model download.
+> Documents are processed entirely on your own hardware and never uploaded anywhere. Citation checks may query Crossref/OpenAlex with reference metadata (titles, authors, DOIs) when online verification is enabled.
 > Analyzes plagiarism, AI-generated content, citation hallucinations, ghostwriting, predatory references, and essay mill patterns in a single pipeline -- plus an experimental token-distribution heuristic for LLM watermark research.
+> Results are a supporting signal for human review, not a determination of misconduct.
 
 ---
 
@@ -174,9 +175,14 @@ python -m spacy download en_core_web_sm
 **Docker (recommended for production / air-gapped environments):**
 ```bash
 docker compose up --build
-# API available at http://localhost:8000
+# API available at http://localhost:8000 (bound to localhost only by default)
 # Swagger UI at http://localhost:8000/docs
 ```
+The container runs as a non-root user and its healthcheck needs no extra
+tools. By default the compose file only publishes the API on the host's
+loopback interface. Before exposing it beyond localhost (a different host
+binding, a reverse proxy, etc.), set `AEGIS_API_KEY` -- otherwise every
+route except `/health` is unauthenticated.
 
 **Windows one-click:**
 ```bat
@@ -346,6 +352,9 @@ Copy `.env.example` to `.env` and set:
 | `AEGIS_REPORT_DIR` | `./aegis_reports` | Output directory for JSON/HTML reports |
 | `AEGIS_DEVICE` | `cpu` | PyTorch device (`cpu`, `cuda`, `mps`) |
 | `AEGIS_CITATION_EMAIL` | `aegis-check@example.com` | Email for Crossref polite-pool |
+| `AEGIS_API_KEY` | unset | If set, the REST API requires a matching `X-API-Key` header on every route except `/health`. Unset means no authentication -- only expose the API to a trusted network in that case. |
+| `AEGIS_MAX_UPLOAD_MB` | `50` | Maximum upload size (MB) accepted by `/analyze`, `/compare`, and `/corpus/add`; larger uploads get HTTP 413. |
+| `AEGIS_MAX_CONCURRENT_JOBS` | `2` | Maximum concurrent `/analyze` requests; additional requests get HTTP 503 instead of queuing. |
 
 All settings can also be passed as `PipelineConfig` arguments in the Python API.
 
@@ -393,11 +402,12 @@ The test suite runs without network calls or ML model downloads.
 
 ---
 
-## Why AEGIS Is the Best Choice for Research Institutions
+## Why Choose AEGIS
 
-**1. Complete privacy.** Every competitor -- Turnitin, CopyLeaks, GPTZero -- sends your
-manuscript to their servers. AEGIS runs entirely on your machine. For unpublished research,
-clinical data, or confidential submissions, this is the only responsible choice.
+**1. Local-first processing.** AEGIS never uploads your manuscript anywhere -- analysis
+runs entirely on your own machine. Citation checks may query Crossref/OpenAlex with
+reference metadata (titles, authors, DOIs), never the document itself, and only when
+online verification is enabled.
 
 **2. Reduced false-positive bias against international researchers.** [Liang et al. (Stanford,
 2023)](https://arxiv.org/abs/2304.02819) found GPT detectors misclassified more than half of
@@ -410,9 +420,10 @@ mainstream tools. AEGIS also includes an experimental, informational-only LLM wa
 heuristic not commonly found in open-source alternatives -- see its
 [capabilities and limitations](#watermark-detection-capabilities-and-limitations).
 
-**4. Fully explainable.** No black-box scores. Every flag cites the exact sentence, the
-source it was matched against, and the metric that triggered it. Defensible in an
-academic integrity committee hearing.
+**4. Explainable, not a black box.** Every flag cites the exact sentence, the source it
+was matched against, and the metric that triggered it, so a human reviewer can verify or
+dismiss it -- rather than a single opaque score. AEGIS results are a supporting signal for
+human review, not a determination of misconduct.
 
 **5. Built for research institutions.** REST API for LMS integration, Docker for
 air-gapped deployment, batch mode for classroom scanning, persistent indices for
@@ -461,6 +472,55 @@ Website: [sunilgentyala.github.io/aegis-integrity](https://sunilgentyala.github.
 ---
 
 ## Changelog
+
+### v2.2.0 (July 2026)
+Behavioral and security fixes from an independent audit -- not documentation-only,
+so this is a minor version bump rather than a patch:
+- **FIX (correctness, high severity):** ESL calibration multipliers were inverted --
+  values below 1.0 *lowered* the AI-flagging threshold for non-native languages,
+  making false positives against ESL writers *more* likely, the opposite of the
+  documented intent. Multipliers are now >1.0, raising the threshold instead.
+- **FIX (correctness):** A Crossref 404 was treated as proof a citation was
+  hallucinated (confidence 0.95), but Crossref only covers Crossref-registered
+  DOIs -- DataCite-registered DOIs (e.g. arXiv's `10.48550/*` prefix) always 404
+  there even when valid. Now checks the DOI's registration agency first and
+  returns `NOT_FOUND_IN_CROSSREF` instead of `HALLUCINATED` when appropriate.
+  Timeouts/429/5xx now return `UNAVAILABLE` rather than being folded into a
+  verdict about the citation.
+- **FIX (correctness, data loss):** `CorpusIndexer` reloaded document metadata
+  after a restart but not the actual document text, so `build_indices()` would
+  silently rebuild from an empty corpus and drop every previously-indexed
+  document. Document text is now persisted and reloaded correctly.
+- **FIX (security):** Replaced pickle-based corpus/index serialization with
+  JSON -- the REST API's `/corpus/add` + `/corpus/build` wrote to the same
+  directory `/analyze` deserialized via `pickle.load`, an arbitrary-code-
+  execution risk if that directory were ever writable by an untrusted party.
+- **FIX (security):** The REST API had no authentication, no upload size limit,
+  and no concurrency limit. Added optional `AEGIS_API_KEY` header auth (all
+  routes except `/health`), `AEGIS_MAX_UPLOAD_MB` (default 50MB), and
+  `AEGIS_MAX_CONCURRENT_JOBS` (default 2, returns 503 instead of queuing
+  unboundedly).
+  API version now reports `aegis.__version__` instead of a hardcoded `1.0.0`.
+- **FIX:** Report JSON/HTML hardcoded `"aegis_version": "2.1.0"` and a stale
+  footer version instead of using `aegis.__version__`. `source_breakdown` keys
+  (document labels) were interpolated into HTML unescaped. `citation_network`
+  and `coherence` detector results were produced by the pipeline but never
+  appeared in the JSON report or HTML output -- both are now included.
+- **NEW:** `aegis batch` CLI command and `POST /batch` API endpoint. Both were
+  documented in the README and on the GitHub Pages site already, but neither
+  existed -- `aegis batch` returned "Error: No such command 'batch'". Both now
+  wire in the existing (previously untested) `BatchAnalyzer` detector.
+- **FIX (Docker):** the healthcheck ran `curl`, which the image never
+  installed, so it always failed. Replaced with a Python-based check. Added a
+  non-root user, removed a silently-swallowed model-download failure, stopped
+  installing dependencies twice (`requirements.txt` + editable install
+  overlapped almost entirely), pinned the base image to a content digest, and
+  added CPU/memory limits + localhost-only port binding to docker-compose.yml.
+- **CHANGED:** Softened several unqualified claims on the README and GitHub
+  Pages site ("Production Stable" -> "Beta -- Human Review Required", "Zero
+  Blind Spots", "Closes Every Gap", "Enterprise-Ready", "Defensible in any
+  hearing") given the correctness bugs found in this audit, and corrected a
+  privacy claim that didn't account for Crossref/OpenAlex citation lookups.
 
 ### v2.1.1 (July 2026)
 - **FIX:** Replaced unsourced comparison-table claims and stats on the README and GitHub Pages

@@ -9,7 +9,9 @@ Detectors active (no torch/SBERT needed):
   - N-gram self-comparison   (datasketch MinHash)
 """
 
-import sys, os, re, json
+import sys
+import re
+import json
 from pathlib import Path
 
 # Make aegis importable from this directory
@@ -45,7 +47,7 @@ stylo = StylometricAnalyzer(segment_size_words=300, change_threshold=0.40)
 sresult = stylo.analyze(doc.full_text)
 dp = sresult.document_profile
 
-print(f"\n      --- Document Stylometric Profile ---")
+print("\n      --- Document Stylometric Profile ---")
 print(f"      Word count              : {dp.word_count:,}")
 print(f"      Avg sentence length     : {dp.avg_sentence_len} words")
 print(f"      Std sentence length     : {dp.std_sentence_len} words")
@@ -58,7 +60,7 @@ print(f"      Nominalization density  : {dp.nominalization_density} per 100 word
 print(f"      Hedge word density      : {dp.hedge_density} per 100 words")
 print(f"      Punctuation density     : {dp.punct_density} per sentence")
 
-print(f"\n      --- Style Consistency ---")
+print("\n      --- Style Consistency ---")
 print(f"      Segments analyzed       : {len(sresult.segment_profiles)}")
 print(f"      Consistency score       : {sresult.consistency_score:.3f} (1.0 = perfect)")
 print(f"      Is consistent           : {'YES' if sresult.is_consistent else 'NO -- flagged'}")
@@ -68,7 +70,7 @@ if flagged_segs:
     for cp in flagged_segs:
         print(f"        Seg {cp.segment_index:02d}: delta={cp.delta_distance:.3f} | {cp.text_preview[:80]}...")
 else:
-    print(f"      No segments flagged (all within delta threshold 0.40)")
+    print("      No segments flagged (all within delta threshold 0.40)")
 
 if sresult.flags:
     for f in sresult.flags:
@@ -84,7 +86,7 @@ fw_pairs = list(zip(
     dp.function_word_vector
 ))
 fw_pairs.sort(key=lambda x: x[1], reverse=True)
-print(f"\n      Top 10 function words by frequency:")
+print("\n      Top 10 function words by frequency:")
 for w, freq in fw_pairs[:10]:
     bar = "#" * int(freq * 500)
     print(f"        {w:10s} {freq:.4f}  {bar}")
@@ -114,7 +116,7 @@ print(f"      Document AI heuristic score : {doc_ai_score:.3f} (0=human, 1=AI-li
 print(f"      Paragraphs above 0.55 threshold : {len(ai_flagged)}")
 
 if ai_flagged:
-    print(f"\n      Most AI-like paragraphs (heuristic only -- no GPT-2):")
+    print("\n      Most AI-like paragraphs (heuristic only -- no GPT-2):")
     for score, burst, style, para in sorted(ai_flagged, key=lambda x: -x[0])[:3]:
         print(f"        Score={score:.3f} | Burstiness={burst:.3f} | "
               f"StyleScore={style:.3f}")
@@ -128,7 +130,7 @@ hedge_count = sum(doc.full_text.lower().count(h) for h in HEDGE_PHRASES)
 total_words = len(doc.full_text.split())
 hedge_density = hedge_count / (total_words / 100)
 print(f"\n      Hedge phrase density    : {hedge_density:.2f} per 100 words")
-print(f"      (AI academic text typical: >5.0; human academic: 2-4)")
+print("      (AI academic text typical: >5.0; human academic: 2-4)")
 
 # Sentence length CV across the whole document
 sentences = [s for s in re.split(r"(?<=[.!?])\s+", doc.full_text)
@@ -138,7 +140,7 @@ if lengths:
     mean_l = sum(lengths) / len(lengths)
     cv = (sum((l - mean_l)**2 for l in lengths) / len(lengths))**0.5 / max(mean_l, 1)
     print(f"      Sentence length CV      : {cv:.3f}")
-    print(f"      (Human academic typical: 0.40-0.70; AI typical: <0.35)")
+    print("      (Human academic typical: 0.40-0.70; AI typical: <0.35)")
 
 # ---------------------------------------------------------------------------
 # 4. Citation integrity
@@ -219,7 +221,7 @@ if doc_refs:
         for issue in v.issues:
             print(f"              Issue: {issue}")
 
-    print(f"\n      --- Citation Integrity Summary ---")
+    print("\n      --- Citation Integrity Summary ---")
     print(f"      Total references verified : {summary['total_references']}")
     print(f"      Verdict breakdown         : {summary['verdict_counts']}")
     print(f"      Flagged (MISMATCH+HALL.)  : {summary['flagged_count']}")
@@ -251,7 +253,7 @@ if len(sections_text) >= 2:
 
     if high_overlap_pairs:
         high_overlap_pairs.sort(key=lambda x: -x[0])
-        print(f"      Section pairs with notable lexical overlap:")
+        print("      Section pairs with notable lexical overlap:")
         for score, li, lj, res in high_overlap_pairs[:5]:
             print(f"        {li[:35]:35s} vs {lj[:35]:35s}")
             print(f"          word-J={res['word_ngram_jaccard']:.3f}  "
@@ -268,12 +270,12 @@ for t in tokens:
     freq[t] = freq.get(t, 0) + 1
 vocab = len(freq)
 hapax = sum(1 for c in freq.values() if c == 1)
-print(f"\n      Vocabulary statistics:")
+print("\n      Vocabulary statistics:")
 print(f"        Total word tokens      : {len(tokens):,}")
 print(f"        Unique words (vocab)   : {vocab:,}")
 print(f"        Hapax legomena         : {hapax:,} ({hapax/vocab*100:.1f}% of vocab)")
 print(f"        Type-token ratio       : {vocab/len(tokens):.4f}")
-print(f"        Top 20 content words   :")
+print("        Top 20 content words   :")
 content_stops = {"the","be","to","of","and","a","in","that","have","it","for","not",
                  "on","with","as","by","from","they","we","this","an","is","are","was",
                  "were","or","at","but","which","their","can","also","such","our","these",

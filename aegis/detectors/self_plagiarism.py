@@ -25,8 +25,7 @@ Detection layers:
 
 from __future__ import annotations
 import re
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -167,7 +166,6 @@ class SelfPlagiarismDetector:
             unflagged = [s for i, s in enumerate(sub_sents)
                          if i not in flagged_sub_sents and len(s.split()) >= 10]
             if unflagged:
-                import numpy as np
                 q_vecs = self._sbert.encode(
                     unflagged, batch_size=32,
                     normalize_embeddings=True, show_progress_bar=False)

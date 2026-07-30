@@ -4,7 +4,8 @@ Run: python docs/make_thumbnail.py
 Requires: pip install Pillow
 """
 from PIL import Image, ImageDraw, ImageFont
-import os, math
+import os
+import math
 
 W, H = 1200, 630
 OUT = os.path.join(os.path.dirname(__file__), "thumbnail.png")

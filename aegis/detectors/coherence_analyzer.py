@@ -27,9 +27,7 @@ from __future__ import annotations
 import re
 import math
 import logging
-from dataclasses import dataclass, field
-from collections import Counter
-from typing import Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +130,7 @@ class SemanticCoherenceAnalyzer:
         mean = sum(lengths) / len(lengths)
         if mean == 0:
             return 0.0
-        std = math.sqrt(sum((l - mean) ** 2 for l in lengths) / len(lengths))
+        std = math.sqrt(sum((ln - mean) ** 2 for ln in lengths) / len(lengths))
         return std / mean
 
     def _mtld(self, text: str, threshold: float = 0.72) -> float:

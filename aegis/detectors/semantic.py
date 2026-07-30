@@ -75,7 +75,6 @@ class SemanticDetector:
         self._load_models()
 
         self._index_texts = []
-        embeddings = []
 
         for label, text in corpus:
             sentences = self._split_sentences(text)

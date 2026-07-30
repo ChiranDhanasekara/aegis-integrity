@@ -4,8 +4,8 @@ AEGIS detector unit tests.
 Run with:  pytest tests/ -v
 """
 
-import math
 import pytest
+import requests
 from unittest.mock import patch, MagicMock
 
 
@@ -312,6 +312,68 @@ class TestCitationIntegrityDetector:
         assert s["risk_level"] == "HIGH"
         assert s["flagged_count"] == 1
 
+    def _mock_session(self, responses: dict):
+        """responses: {url_substring: (status_code, json_dict)}"""
+        session = MagicMock()
+
+        def fake_get(url, timeout=None, params=None):
+            for substr, (status, body) in responses.items():
+                if substr in url:
+                    resp = MagicMock()
+                    resp.status_code = status
+                    resp.json.return_value = body
+                    return resp
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        session.get.side_effect = fake_get
+        return session
+
+    def test_datacite_doi_is_not_hallucinated_on_crossref_404(self):
+        """arXiv-style DOIs are registered with DataCite, not Crossref, so
+        /works/{doi} always 404s even for real DOIs. The agency check must
+        catch this instead of reporting HALLUCINATED."""
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        session = self._mock_session({
+            "/agency": (200, {"message": {"agency": {"id": "datacite"}}}),
+            "": (404, {}),
+        })
+        with patch.object(det, "_get_session", return_value=session):
+            ref = self._make_ref(doi="10.48550/arXiv.2304.02819", title="A Paper")
+            verdict = det._verify_one(ref)
+        assert verdict.verdict == "NOT_FOUND_IN_CROSSREF"
+
+    def test_doi_missing_from_every_agency_is_hallucinated(self):
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        session = self._mock_session({
+            "/agency": (404, {}),
+            "": (404, {}),
+        })
+        with patch.object(det, "_get_session", return_value=session):
+            ref = self._make_ref(doi="10.9999/totally-fake", title="A Paper")
+            verdict = det._verify_one(ref)
+        assert verdict.verdict == "HALLUCINATED"
+
+    def test_crossref_5xx_is_unavailable_not_hallucinated(self):
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        session = self._mock_session({"": (503, {})})
+        with patch.object(det, "_get_session", return_value=session):
+            ref = self._make_ref(doi="10.1/real-but-down", title="A Paper")
+            verdict = det._verify_one(ref)
+        assert verdict.verdict == "UNAVAILABLE"
+
+    def test_crossref_timeout_is_unavailable(self):
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        session = MagicMock()
+        session.get.side_effect = requests.exceptions.Timeout("timed out")
+        with patch.object(det, "_get_session", return_value=session):
+            ref = self._make_ref(doi="10.1/slow", title="A Paper")
+            verdict = det._verify_one(ref)
+        assert verdict.verdict == "UNAVAILABLE"
+
 
 # ---------------------------------------------------------------------------
 # AI detector (heuristic path only; no LLM loading)
@@ -366,8 +428,28 @@ class TestAIDetectorHeuristics:
 
     def test_esl_multiplier_applied(self):
         from aegis.detectors.ai_detector import ESL_THRESHOLD_MULTIPLIER
-        assert ESL_THRESHOLD_MULTIPLIER["zh"] < ESL_THRESHOLD_MULTIPLIER["en"]
+        # Non-native multipliers must be > 1.0: they RAISE the flagging
+        # threshold so non-native text needs a higher AI score before being
+        # flagged, correcting the over-flagging bias documented by Liang
+        # et al. (2023) -- not lowering the bar, which would make it worse.
+        assert ESL_THRESHOLD_MULTIPLIER["zh"] > ESL_THRESHOLD_MULTIPLIER["en"]
         assert ESL_THRESHOLD_MULTIPLIER["en"] == pytest.approx(1.0)
+
+    def test_esl_calibration_raises_not_lowers_threshold(self):
+        """A non-native-language document must never be flagged more
+        aggressively than the same score would be for English text."""
+        from aegis.detectors.ai_detector import AIContentDetector, ESL_THRESHOLD_MULTIPLIER
+        det = AIContentDetector()
+        base_thresh = det.ensemble_thresh
+        for lang, multiplier in ESL_THRESHOLD_MULTIPLIER.items():
+            if lang == "en":
+                continue
+            calibrated = base_thresh * multiplier
+            assert calibrated >= base_thresh, (
+                f"lang={lang} calibrated threshold {calibrated} is lower than "
+                f"the English baseline {base_thresh}; this makes ESL writers "
+                f"MORE likely to be flagged, not less"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -426,3 +508,63 @@ class TestReportGenerator:
         assert ReportGenerator._esc("<script>") == "&lt;script&gt;"
         assert ReportGenerator._esc("&") == "&amp;"
         assert ReportGenerator._esc('"') == "&quot;"
+
+    def test_aegis_version_is_dynamic_not_hardcoded(self):
+        from aegis import __version__
+        from aegis.report.generator import ReportGenerator
+        report = self._make_minimal_report()
+        gen = ReportGenerator(".")
+        d = gen._report_to_dict(report)
+        assert d["aegis_version"] == __version__
+
+    def test_footer_uses_dynamic_version(self):
+        from aegis import __version__
+        from aegis.report.generator import ReportGenerator
+        report = self._make_minimal_report()
+        gen = ReportGenerator(".")
+        html = gen._render_html(gen._report_to_dict(report), report)
+        assert f"v{__version__}" in html
+        assert "v2.1.0" not in html
+
+    def test_source_breakdown_key_is_html_escaped(self):
+        from aegis.detectors.self_plagiarism import SelfPlagiarismResult
+        from aegis.report.generator import ReportGenerator
+        report = self._make_minimal_report()
+        report.self_plagiarism_result = SelfPlagiarismResult(
+            overall_overlap_pct=12.0,
+            risk_level="MEDIUM",
+            recycled_passages=[],
+            source_breakdown={"<img src=x onerror=alert(1)>": 12.0},
+            flags=[],
+            cope_guidance="Review manually.",
+        )
+        gen = ReportGenerator(".")
+        html = gen._render_html(gen._report_to_dict(report), report)
+        assert "<img src=x onerror=alert(1)>" not in html
+        assert "&lt;img src=x onerror=alert(1)&gt;" in html
+
+    def test_citation_network_and_coherence_are_serialized(self):
+        from aegis.detectors.citation_network import CitationNetworkResult
+        from aegis.detectors.coherence_analyzer import CoherenceResult
+        from aegis.report.generator import ReportGenerator
+
+        report = self._make_minimal_report()
+        report.citation_network_result = CitationNetworkResult(
+            total_references=10, self_citation_count=1, self_citation_rate=0.1,
+            predatory_journal_count=0, missing_doi_rate=0.0, year_span=(2020, 2023),
+            venue_concentration=0.2, flags=[], overall_risk="LOW",
+            openalex_queried=True, details={},
+        )
+        report.coherence_result = CoherenceResult(
+            discourse_connector_density=2.0, sentence_length_cv=0.4, mtld_score=80.0,
+            hedging_density=1.0, section_template_match=0.3, ensemble_score=0.2,
+            verdict="HUMAN_LIKE", confidence=0.8, flags=[], paragraph_scores=[],
+        )
+        gen = ReportGenerator(".")
+        d = gen._report_to_dict(report)
+        assert d["citation_network"]["total_references"] == 10
+        assert d["coherence"]["verdict"] == "HUMAN_LIKE"
+
+        html = gen._render_html(d, report)
+        assert "Citation Network Analysis" in html
+        assert "Semantic Coherence Analysis" in html

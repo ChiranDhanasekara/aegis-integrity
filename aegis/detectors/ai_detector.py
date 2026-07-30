@@ -3,9 +3,10 @@ Language-Calibrated AI Content Detector -- AEGIS Novel Feature #2.
 
 Fills two critical gaps in existing tools:
   1. Calibration for non-native English speakers (ESL bias):
-     Stanford study showed 61.3% false positive rate on ESL writers
-     across all major detectors. AEGIS applies language-origin detection
-     and adjusts thresholds accordingly.
+     Liang et al. (Stanford, 2023) found GPT detectors misclassify more
+     than half of non-native-authored TOEFL essays as AI-generated. AEGIS
+     applies language-origin detection and raises the flagging threshold
+     for non-native text accordingly.
   2. Paragraph-level scoring (not document-level):
      Most tools give one score per document. AEGIS scores every paragraph
      so partially AI-injected papers are caught.
@@ -26,19 +27,21 @@ import re
 import math
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-# ESL calibration multipliers -- threshold is multiplied by this factor
-# for non-native English writing styles (languages where AI tools over-flag)
+# ESL calibration multipliers -- the AI-flagging threshold is multiplied by
+# this factor for non-native English writing styles (languages where AI
+# detectors over-flag human writers, per Liang et al. 2023). Values are >1.0
+# so non-native text needs a *higher* ensemble score before it is flagged --
+# raising the bar, not lowering it, is what corrects a false-positive bias.
 ESL_THRESHOLD_MULTIPLIER = {
-    "zh": 0.80, "ko": 0.80, "ja": 0.80,  # East Asian
-    "ar": 0.82, "fa": 0.82,               # Arabic / Farsi
-    "ru": 0.85, "uk": 0.85,               # Slavic
-    "es": 0.88, "pt": 0.88, "it": 0.88,  # Romance
-    "de": 0.90, "fr": 0.90,               # Germanic/Gallic
+    "zh": 1.25, "ko": 1.25, "ja": 1.25,  # East Asian
+    "ar": 1.22, "fa": 1.22,               # Arabic / Farsi
+    "ru": 1.18, "uk": 1.18,               # Slavic
+    "es": 1.14, "pt": 1.14, "it": 1.14,  # Romance
+    "de": 1.11, "fr": 1.11,               # Germanic/Gallic
     "en": 1.00,                            # Native English (no adjustment)
 }
 
@@ -146,7 +149,7 @@ class AIContentDetector:
             lang = self._lang_detector(text[:500])
         except Exception:
             lang = "en"
-        multiplier = ESL_THRESHOLD_MULTIPLIER.get(lang, 0.90)
+        multiplier = ESL_THRESHOLD_MULTIPLIER.get(lang, 1.11)
         calibrated_thresh = self.ensemble_thresh * multiplier
 
         paragraphs = self._split_paragraphs(text)
@@ -275,7 +278,7 @@ class AIContentDetector:
         if len(lengths) < 3:
             return 0.5
         mean_len = sum(lengths) / len(lengths)
-        variance = sum((l - mean_len) ** 2 for l in lengths) / len(lengths)
+        variance = sum((ln - mean_len) ** 2 for ln in lengths) / len(lengths)
         std_len = variance ** 0.5
         cv = std_len / mean_len if mean_len > 0 else 0.0
         # AI text CV typically < 0.35; human academic text typically 0.40-0.70
@@ -296,7 +299,7 @@ class AIContentDetector:
         # 1. Sentence length uniformity (AI text has less variance)
         lengths = [len(s.split()) for s in sentences]
         mean_len = sum(lengths) / len(lengths)
-        cv = (sum((l - mean_len)**2 for l in lengths) / len(lengths))**0.5 / max(mean_len, 1)
+        cv = (sum((ln - mean_len)**2 for ln in lengths) / len(lengths))**0.5 / max(mean_len, 1)
         signals.append(1.0 - min(cv / 0.5, 1.0))  # low cv = AI-like
 
         # 2. Hedge phrase density (AI text uses many hedges)

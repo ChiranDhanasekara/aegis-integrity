@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 
 <!-- HERO -->
 <div class="hero">
-  <div class="hero-badge"><span></span>v2.1.1 &nbsp;|&nbsp; Production Stable &nbsp;|&nbsp; July 2026</div>
+  <div class="hero-badge"><span></span>v2.2.0 &nbsp;|&nbsp; Beta &mdash; Human Review Required &nbsp;|&nbsp; July 2026</div>
   <h1>The Integrity Checker<br>That Sees Everything</h1>
   <p class="hero-sub">
     Open-source. Offline. Bias-aware. 10 detection modules in a single pip install.
@@ -367,7 +367,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 
 <!-- DETECTORS -->
 <div class="sec" id="detectors">
-  <div class="sec-title">Ten Modules. Zero Blind Spots.</div>
+  <div class="sec-title">Ten Detection Modules, One Pipeline</div>
   <p class="sec-sub">Each module runs independently and contributes to a unified risk score. Disable any module via PipelineConfig.</p>
   <div class="det-grid">
 
@@ -448,8 +448,8 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
       <a href="https://github.com/sunilgentyala/aegis-integrity" target="_blank" class="btn btn-primary">
         &#9733; Star the Repo
       </a>
-      <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.1.1" target="_blank" class="btn btn-outline">
-        &#128229; Download v2.1.1
+      <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.2.0" target="_blank" class="btn btn-outline">
+        &#128229; Download v2.2.0
       </a>
       <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank" class="btn btn-outline">
         &#128172; Open an Issue
@@ -591,28 +591,28 @@ report = pipeline.analyze(<span class="str">"submission.pdf"</span>)
   <div class="why-grid">
     <div class="why-card">
       <div class="why-icon">&#128274;</div>
-      <div class="why-title">Complete Privacy</div>
-      <div class="why-desc">Every competitor sends your manuscript to their cloud. AEGIS runs entirely on your hardware. For unpublished research, clinical data, or confidential documents, this is the only responsible choice.</div>
+      <div class="why-title">Local-First Processing</div>
+      <div class="why-desc">AEGIS never uploads your manuscript anywhere -- analysis runs entirely on your own hardware. Citation checks may query Crossref/OpenAlex with reference metadata (titles, authors, DOIs), never the document itself, and only when online verification is enabled.</div>
     </div>
     <div class="why-card">
       <div class="why-icon">&#127760;</div>
-      <div class="why-title">No ESL Bias</div>
-      <div class="why-desc"><a href="https://arxiv.org/abs/2304.02819" target="_blank" rel="noopener">Liang et al. (Stanford, 2023)</a> found GPT detectors misclassified more than half of non-native-authored TOEFL essays as AI-generated. AEGIS applies per-language calibration across 15 languages to reduce this bias.</div>
+      <div class="why-title">ESL Bias Calibration</div>
+      <div class="why-desc"><a href="https://arxiv.org/abs/2304.02819" target="_blank" rel="noopener">Liang et al. (Stanford, 2023)</a> found GPT detectors misclassified more than half of non-native-authored TOEFL essays as AI-generated. AEGIS applies per-language threshold calibration across 15 languages to reduce -- not eliminate -- this bias.</div>
     </div>
     <div class="why-card">
       <div class="why-icon">&#128269;</div>
-      <div class="why-title">Closes Every Gap</div>
-      <div class="why-desc">Citation cartels, essay mills, AI-polished text that passes perplexity, and hallucinated bibliographies are all invisible to every other tool. AEGIS also runs an experimental, informational-only LLM watermark heuristic no other open-source tool attempts.</div>
+      <div class="why-title">Targets Overlooked Gaps</div>
+      <div class="why-desc">Citation cartels, essay mills, AI-polished text that passes perplexity, and hallucinated bibliographies are not publicly documented as covered by mainstream tools. AEGIS also runs an experimental, informational-only LLM watermark heuristic. Results are a supporting signal for human review, not a determination of misconduct.</div>
     </div>
     <div class="why-card">
       <div class="why-icon">&#128270;</div>
-      <div class="why-title">Fully Explainable</div>
-      <div class="why-desc">No black-box scores. Every flag cites the exact sentence, the source it matched, and the metric that triggered it. Defensible in any integrity review or contract dispute.</div>
+      <div class="why-title">Explainable, Not a Black Box</div>
+      <div class="why-desc">Every flag cites the exact sentence, the source it matched, and the metric that triggered it, so a human reviewer can verify or dismiss it -- rather than a single opaque score.</div>
     </div>
     <div class="why-card">
       <div class="why-icon">&#127970;</div>
-      <div class="why-title">Enterprise-Ready</div>
-      <div class="why-desc">REST API for pipeline integration, Docker for on-prem or VPC deployment, batch mode for classroom or cohort scanning, persistent FAISS indices for high-throughput systems.</div>
+      <div class="why-title">Self-Hostable Deployment</div>
+      <div class="why-desc">REST API (optionally key-protected) for pipeline integration, Docker for on-prem or VPC deployment, batch mode for classroom or cohort scanning, persistent FAISS indices for high-throughput systems.</div>
     </div>
     <div class="why-card">
       <div class="why-icon">&#128176;</div>
@@ -679,7 +679,7 @@ submission (PDF / DOCX / TEX / TXT)
   <div style="margin-top:.4rem;color:var(--muted);font-size:.83rem">sunil.gentyala@ieee.org</div>
   <div class="footer-links">
     <a href="https://github.com/sunilgentyala/aegis-integrity" target="_blank">GitHub Repo</a>
-    <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.1.1" target="_blank">v2.1.1 Release</a>
+    <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.2.0" target="_blank">v2.2.0 Release</a>
     <a href="https://github.com/sunilgentyala/aegis-integrity/blob/main/README.md" target="_blank">Documentation</a>
     <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank">Report an Issue</a>
     <a href="https://www.linkedin.com/in/sunilgentyala" target="_blank">LinkedIn</a>

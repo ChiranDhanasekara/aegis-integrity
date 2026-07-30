@@ -7,11 +7,19 @@ No existing open-source plagiarism tool validates citations. This module:
   3. Cross-checks author names, year, and journal against the resolved metadata
   4. Detects hallucinated references (DOI resolves to a different paper)
   5. Flags unresolvable DOIs (possibly fabricated by LLMs)
-  6. Computes a per-reference verdict: VALID / MISMATCH / HALLUCINATED / UNRESOLVABLE / NO_DOI
+  6. Computes a per-reference verdict: VALID / MISMATCH / HALLUCINATED /
+     NOT_FOUND_IN_CROSSREF / UNAVAILABLE / UNRESOLVABLE / NO_DOI
 
-This addresses the LLM hallucinated citation epidemic:
-  - Studies show >50% of AI-generated references are fabricated
-  - Zero production tools verify citations against live databases
+A Crossref 404 on /works/{doi} means "not a Crossref record," not "fake DOI":
+DataCite-registered DOIs (e.g. arXiv's 10.48550/* prefix) always 404 against
+Crossref even when valid, so a 404 triggers a registration-agency check via
+/works/{doi}/agency before HALLUCINATED is returned. Transient failures
+(timeouts, 429, 5xx) are reported as UNAVAILABLE rather than folded into a
+verdict about the citation itself.
+
+A peer-reviewed study found ChatGPT fabricated up to 55% of references
+depending on model version (Walters & Wilder, Scientific Reports, 2023,
+https://doi.org/10.1038/s41598-023-41032-5).
 """
 
 from __future__ import annotations
@@ -21,7 +29,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Optional
 
+import requests
+
 logger = logging.getLogger(__name__)
+
+_NETWORK_EXCEPTIONS = (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
 
 
 @dataclass
@@ -36,7 +48,8 @@ class CitationVerdict:
     resolved_authors: list[str]
     resolved_year: Optional[str]
     resolved_journal: Optional[str]
-    verdict: str          # VALID | MISMATCH | HALLUCINATED | UNRESOLVABLE | NO_DOI
+    verdict: str          # VALID | MISMATCH | HALLUCINATED | NOT_FOUND_IN_CROSSREF |
+                          # UNAVAILABLE | UNRESOLVABLE | NO_DOI
     confidence: float     # 0.0 -- 1.0
     issues: list[str]
     crossref_url: Optional[str]
@@ -133,27 +146,17 @@ class CitationIntegrityDetector:
             url = f"{self.CROSSREF_BASE}/{doi}"
             r = session.get(url, timeout=self.timeout)
             if r.status_code == 404:
-                return CitationVerdict(
-                    cite_key=ref.cite_key or "unknown",
-                    raw_text=raw[:300],
-                    doi=doi,
-                    claimed_year=claimed_year,
-                    claimed_authors=claimed_authors,
-                    claimed_title=claimed_title,
-                    resolved_title=None,
-                    resolved_authors=[],
-                    resolved_year=None,
-                    resolved_journal=None,
-                    verdict="HALLUCINATED",
-                    confidence=0.95,
-                    issues=[f"DOI {doi} returned HTTP 404 -- does not exist in Crossref"],
-                    crossref_url=url,
-                )
+                return self._handle_crossref_404(ref, doi, url)
+            if r.status_code == 429 or r.status_code >= 500:
+                return self._unavailable(
+                    ref, doi, f"Crossref HTTP {r.status_code} (rate-limited or down)")
             if r.status_code != 200:
                 return self._unresolvable(ref, doi,
                                           f"Crossref HTTP {r.status_code}")
 
             data = r.json().get("message", {})
+        except _NETWORK_EXCEPTIONS as ex:
+            return self._unavailable(ref, doi, str(ex))
         except Exception as ex:
             return self._unresolvable(ref, doi, str(ex))
 
@@ -266,6 +269,87 @@ class CitationIntegrityDetector:
             return self._verify_one(ref)
         except Exception as ex:
             return self._no_doi_verdict(ref, str(ex))
+
+    def _handle_crossref_404(self, ref, doi: str, url: str) -> CitationVerdict:
+        """
+        A 404 from /works/{doi} only means Crossref has no record for this DOI --
+        it does NOT mean the DOI doesn't exist. DOIs registered with a different
+        agency (e.g. DataCite, which registers arXiv's 10.48550/* prefix) will
+        always 404 against Crossref even though they're real, resolvable DOIs.
+        Check the registration agency before concluding the citation is fabricated.
+        """
+        try:
+            session = self._get_session()
+            agency_url = f"{self.CROSSREF_BASE}/{doi}/agency"
+            r = session.get(agency_url, timeout=self.timeout)
+            if r.status_code == 200:
+                agency = (
+                    r.json().get("message", {}).get("agency", {}).get("id", "")
+                ).lower()
+                if agency and agency != "crossref":
+                    return CitationVerdict(
+                        cite_key=ref.cite_key or "unknown",
+                        raw_text=(ref.raw or "")[:300],
+                        doi=doi,
+                        claimed_year=ref.year,
+                        claimed_authors=ref.authors or [],
+                        claimed_title=ref.title,
+                        resolved_title=None,
+                        resolved_authors=[],
+                        resolved_year=None,
+                        resolved_journal=None,
+                        verdict="NOT_FOUND_IN_CROSSREF",
+                        confidence=0.3,
+                        issues=[
+                            f"DOI {doi} is registered with {agency}, not Crossref -- "
+                            "AEGIS only queries Crossref, so this citation could not "
+                            "be independently verified. Check the DOI manually."
+                        ],
+                        crossref_url=f"https://doi.org/{doi}",
+                    )
+            # agency lookup also 404s (or errors) -> DOI does not exist anywhere
+        except _NETWORK_EXCEPTIONS as ex:
+            return self._unavailable(ref, doi, f"Agency check failed: {ex}")
+        except Exception:
+            pass  # fall through to HALLUCINATED below
+
+        return CitationVerdict(
+            cite_key=ref.cite_key or "unknown",
+            raw_text=(ref.raw or "")[:300],
+            doi=doi,
+            claimed_year=ref.year,
+            claimed_authors=ref.authors or [],
+            claimed_title=ref.title,
+            resolved_title=None,
+            resolved_authors=[],
+            resolved_year=None,
+            resolved_journal=None,
+            verdict="HALLUCINATED",
+            confidence=0.95,
+            issues=[f"DOI {doi} does not exist in Crossref or any other registration agency"],
+            crossref_url=url,
+        )
+
+    def _unavailable(self, ref, doi: str, reason: str) -> CitationVerdict:
+        """Citation verification could not complete due to a transient service
+        issue (timeout, rate limit, outage) -- not a statement about the
+        citation's validity. Callers should not treat this as an integrity flag."""
+        return CitationVerdict(
+            cite_key=ref.cite_key or "unknown",
+            raw_text=(ref.raw or "")[:300],
+            doi=doi,
+            claimed_year=ref.year,
+            claimed_authors=ref.authors or [],
+            claimed_title=ref.title,
+            resolved_title=None,
+            resolved_authors=[],
+            resolved_year=None,
+            resolved_journal=None,
+            verdict="UNAVAILABLE",
+            confidence=0.0,
+            issues=[f"Verification service unavailable: {reason}"],
+            crossref_url=None,
+        )
 
     def _unresolvable(self, ref, doi: str, reason: str) -> CitationVerdict:
         return CitationVerdict(

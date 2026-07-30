@@ -5,7 +5,6 @@ Supports: PDF, DOCX, LaTeX (.tex), plain text, BibTeX.
 
 from __future__ import annotations
 import re
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -317,7 +316,7 @@ class DocumentParser:
         return None
 
     def _extract_title_heuristic(self, text: str) -> Optional[str]:
-        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
         for line in lines[:10]:
             if 10 < len(line) < 200 and not line.startswith("http"):
                 return line

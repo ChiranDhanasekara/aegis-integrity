@@ -12,11 +12,11 @@ attached to an email or opened offline. Includes:
 
 from __future__ import annotations
 import json
-import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from aegis import __version__ as AEGIS_VERSION
 from aegis.core.pipeline import AnalysisReport
 
 
@@ -49,13 +49,22 @@ class ReportGenerator:
             f.write(html)
         return str(path)
 
+    def generate_batch_html(self, result, filename: str = "aegis_batch_report.html") -> str:
+        """Render a standalone HTML report for a BatchAnalysisResult
+        (essay-mill / classroom cross-document analysis). Returns absolute path."""
+        html = self._render_batch_html(result)
+        path = self.output_dir / filename
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(html)
+        return str(path)
+
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
 
     def _report_to_dict(self, r: AnalysisReport) -> dict:
         d: dict = {
-            "aegis_version": "2.1.0",
+            "aegis_version": AEGIS_VERSION,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "submission": r.submission_path,
             "elapsed_seconds": r.elapsed_seconds,
@@ -206,6 +215,53 @@ class ReportGenerator:
                 "detector_version": wr.detector_version,
             }
 
+        # Citation network analysis (self-citation, predatory venues, clustering)
+        if r.citation_network_result:
+            cn = r.citation_network_result
+            d["citation_network"] = {
+                "total_references": cn.total_references,
+                "self_citation_count": cn.self_citation_count,
+                "self_citation_rate": cn.self_citation_rate,
+                "predatory_journal_count": cn.predatory_journal_count,
+                "missing_doi_rate": cn.missing_doi_rate,
+                "year_span": list(cn.year_span),
+                "venue_concentration": cn.venue_concentration,
+                "overall_risk": cn.overall_risk,
+                "openalex_queried": cn.openalex_queried,
+                "flags": [
+                    {
+                        "type": f.flag_type,
+                        "severity": f.severity,
+                        "message": f.message,
+                        "affected_refs": f.affected_refs,
+                    }
+                    for f in cn.flags
+                ],
+            }
+
+        # Semantic coherence / AI-polish analysis
+        if r.coherence_result:
+            co = r.coherence_result
+            d["coherence"] = {
+                "verdict": co.verdict,
+                "ensemble_score": co.ensemble_score,
+                "confidence": co.confidence,
+                "discourse_connector_density": co.discourse_connector_density,
+                "sentence_length_cv": co.sentence_length_cv,
+                "mtld_score": co.mtld_score,
+                "hedging_density": co.hedging_density,
+                "section_template_match": co.section_template_match,
+                "flags": [
+                    {
+                        "signal": f.signal,
+                        "value": f.value,
+                        "threshold": f.threshold,
+                        "message": f.message,
+                    }
+                    for f in co.flags
+                ],
+            }
+
         return d
 
     # ------------------------------------------------------------------
@@ -252,6 +308,8 @@ class ReportGenerator:
         stylo_section = self._stylo_section(data.get("stylometric"))
         self_plag_section = self._self_plag_section(data.get("self_plagiarism"))
         watermark_section = self._watermark_section(data.get("watermark"))
+        citation_network_section = self._citation_network_section(data.get("citation_network"))
+        coherence_section = self._coherence_section(data.get("coherence"))
 
         scores = data["scores"]
 
@@ -351,9 +409,17 @@ class ReportGenerator:
      f"<tbody>{citation_rows}</tbody></table>"}
   </div>
 
+  <!-- Citation network -->
+  <h2>Citation Network Analysis (Self-Citation, Predatory Venues, Clustering)</h2>
+  <div class="section">{citation_network_section}</div>
+
   <!-- Stylometric -->
   <h2>Stylometric Analysis (Authorship Consistency)</h2>
   <div class="section">{stylo_section}</div>
+
+  <!-- Semantic coherence -->
+  <h2>Semantic Coherence Analysis (AI-Polish Detection)</h2>
+  <div class="section">{coherence_section}</div>
 
   <!-- Self-plagiarism -->
   <h2>Self-Plagiarism / Text Recycling</h2>
@@ -363,8 +429,88 @@ class ReportGenerator:
   <h2>LLM Watermark Analysis</h2>
   <div class="section">{watermark_section}</div>
 
-  <footer>AEGIS Academic Integrity Tool v2.1.0 &mdash;
-  Open-source, no data transmitted to third parties</footer>
+  <footer>AEGIS Academic Integrity Tool v{AEGIS_VERSION} &mdash; open-source</footer>
+</div>
+</body>
+</html>"""
+
+    def _render_batch_html(self, result) -> str:
+        risk_color = self.RISK_COLORS.get(result.overall_risk, "#95a5a6")
+        flags_html = "".join(
+            f"<li>{self._esc(f)}</li>" for f in result.flags
+        ) or "<li>No flags raised.</li>"
+
+        pair_rows = "".join(
+            f"<tr><td>{self._esc(p.doc_a)}</td><td>{self._esc(p.doc_b)}</td>"
+            f"<td>{p.ngram_similarity:.3f}</td><td>{p.vocab_overlap:.3f}</td>"
+            f"<td>{p.section_sequence_match:.3f}</td><td>{p.combined_score:.3f}</td>"
+            f"<td><small>{self._esc(p.reason)}</small></td></tr>"
+            for p in result.suspicious_pairs
+        )
+        pairs_section = (
+            "<p class='no-data'>No suspicious pairs found.</p>" if not pair_rows else
+            f"<table><thead><tr><th>Doc A</th><th>Doc B</th><th>N-gram</th>"
+            f"<th>Vocab</th><th>Sections</th><th>Combined</th><th>Reason</th></tr></thead>"
+            f"<tbody>{pair_rows}</tbody></table>"
+        )
+
+        clusters_html = (
+            "<ul>" + "".join(
+                f"<li>{self._esc(', '.join(grp))}</li>" for grp in result.cluster_groups
+            ) + "</ul>"
+        ) if result.cluster_groups else "<p class='no-data'>No submission clusters detected.</p>"
+
+        high_ai_html = (
+            "<p>" + self._esc(", ".join(result.high_ai_cluster)) + "</p>"
+        ) if result.high_ai_cluster else "<p class='no-data'>None.</p>"
+
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AEGIS Batch / Classroom Report</title>
+<style>
+  body {{font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         margin: 0; padding: 0; background: #f5f7fa; color: #2c3e50;}}
+  .container {{max-width: 1100px; margin: 0 auto; padding: 24px;}}
+  h1 {{font-size: 1.8rem; margin-bottom: 4px;}}
+  h2 {{font-size: 1.2rem; border-bottom: 2px solid #ecf0f1; padding-bottom: 6px;
+       margin-top: 32px;}}
+  .badge {{display: inline-block; padding: 6px 18px; border-radius: 20px;
+           color: #fff; font-weight: 700; font-size: 1.1rem;
+           background: {risk_color};}}
+  table {{width: 100%; border-collapse: collapse; font-size: 0.87rem;
+          background: #fff; border-radius: 8px; overflow: hidden;
+          box-shadow: 0 1px 4px rgba(0,0,0,.08);}}
+  th {{background: #2c3e50; color: #fff; padding: 10px 12px; text-align: left;}}
+  td {{padding: 8px 12px; border-bottom: 1px solid #ecf0f1; vertical-align: top;}}
+  .section {{background: #fff; border-radius: 8px; padding: 18px 20px;
+             box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-top: 12px;}}
+  .flags {{background: #fef9e7; border-left: 4px solid #f39c12;
+           padding: 12px 16px; border-radius: 4px; margin: 16px 0;}}
+  .no-data {{color: #95a5a6; font-style: italic;}}
+  footer {{margin-top: 40px; color: #bdc3c7; font-size: 0.78rem; text-align: center;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>AEGIS Batch / Classroom Report</h1>
+  <span class="badge">Overall Risk: {result.overall_risk}</span>
+  <p>Submissions analyzed: {result.submission_count} &nbsp;|&nbsp;
+     Mean AI score: {result.mean_ai_score:.3f} (std {result.ai_score_std:.3f})</p>
+
+  <div class="flags"><strong>Flags:</strong><ul>{flags_html}</ul></div>
+
+  <h2>Suspicious Pairs</h2>
+  <div class="section">{pairs_section}</div>
+
+  <h2>Cluster Groups (Suspected Shared Source)</h2>
+  <div class="section">{clusters_html}</div>
+
+  <h2>High AI-Score Cluster</h2>
+  <div class="section">{high_ai_html}</div>
+
+  <footer>AEGIS Academic Integrity Tool v{AEGIS_VERSION} &mdash; open-source</footer>
 </div>
 </body>
 </html>"""
@@ -510,7 +656,7 @@ class ReportGenerator:
             if rows else ""
         )
         breakdown = ", ".join(
-            f"{k}: {v}%" for k, v in sp.get("source_breakdown", {}).items()
+            f"{self._esc(k)}: {v}%" for k, v in sp.get("source_breakdown", {}).items()
         ) or "N/A"
         return (
             f"<p>Overlap: <strong>{sp['overall_overlap_pct']:.1f}%</strong> "
@@ -560,7 +706,7 @@ class ReportGenerator:
         )
         limitations_html = (
             "<details><summary>Limitations</summary><ul>"
-            + "".join(f"<li>{self._esc(l)}</li>" for l in wm.get("limitations", []))
+            + "".join(f"<li>{self._esc(lim)}</li>" for lim in wm.get("limitations", []))
             + "</ul></details>"
             if wm.get("limitations") else ""
         )
@@ -575,6 +721,55 @@ class ReportGenerator:
             f"(minimum required: {wm.get('minimum_tokens_required', 0)}) &nbsp;|&nbsp; "
             f"z-score: {wm.get('z_score')} &nbsp;|&nbsp; p-value: {wm.get('p_value')}</p>"
             f"{disclaimer}{warnings_html}{limitations_html}"
+        )
+
+    def _citation_network_section(self, cn: Optional[dict]) -> str:
+        if not cn:
+            return "<p class='no-data'>Citation network analysis was skipped or unavailable.</p>"
+        risk_color = self.RISK_COLORS.get(cn["overall_risk"], "#95a5a6")
+        badge = (f'<span class="verdict" style="background:{risk_color}">'
+                 f'{cn["overall_risk"]}</span>')
+        flags_html = (
+            "<ul>" + "".join(
+                f"<li><strong>{self._esc(f['type'])}</strong> "
+                f"({self._esc(f['severity'])}): {self._esc(f['message'])}</li>"
+                for f in cn.get("flags", [])
+            ) + "</ul>"
+        ) if cn.get("flags") else "<p>No citation-network flags.</p>"
+        year_span = cn.get("year_span") or [None, None]
+        return (
+            f"<p>Overall risk: {badge}</p>"
+            f"<p>References: {cn['total_references']} &nbsp;|&nbsp; "
+            f"Self-citation rate: {cn['self_citation_rate']*100:.1f}% "
+            f"({cn['self_citation_count']} refs) &nbsp;|&nbsp; "
+            f"Predatory journal matches: {cn['predatory_journal_count']} &nbsp;|&nbsp; "
+            f"Missing-DOI rate: {cn['missing_doi_rate']*100:.1f}%</p>"
+            f"<p>Year span: {year_span[0]}&ndash;{year_span[1]} &nbsp;|&nbsp; "
+            f"Venue concentration (Herfindahl): {cn['venue_concentration']:.3f} &nbsp;|&nbsp; "
+            f"OpenAlex queried: {'Yes' if cn.get('openalex_queried') else 'No'}</p>"
+            f"{flags_html}"
+        )
+
+    def _coherence_section(self, co: Optional[dict]) -> str:
+        if not co:
+            return "<p class='no-data'>Semantic coherence analysis was skipped or unavailable.</p>"
+        badge = self._verdict_badge(co["verdict"])
+        flags_html = (
+            "<ul>" + "".join(
+                f"<li><strong>{self._esc(f['signal'])}</strong>: {self._esc(f['message'])} "
+                f"(value {f['value']:.3f}, threshold {f['threshold']:.3f})</li>"
+                for f in co.get("flags", [])
+            ) + "</ul>"
+        ) if co.get("flags") else "<p>No coherence flags.</p>"
+        return (
+            f"<p>Verdict: {badge} &nbsp; Score: {co['ensemble_score']:.3f} "
+            f"&nbsp; Confidence: {co['confidence']:.2f}</p>"
+            f"<p>Discourse connector density: {co['discourse_connector_density']:.2f} "
+            f"&nbsp;|&nbsp; Sentence length CV: {co['sentence_length_cv']:.3f} "
+            f"&nbsp;|&nbsp; MTLD: {co['mtld_score']:.2f}</p>"
+            f"<p>Hedging density: {co['hedging_density']:.2f} "
+            f"&nbsp;|&nbsp; Section template match: {co['section_template_match']*100:.0f}%</p>"
+            f"{flags_html}"
         )
 
     # ------------------------------------------------------------------
