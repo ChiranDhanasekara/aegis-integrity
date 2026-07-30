@@ -1,8 +1,13 @@
 @echo off
 setlocal enabledelayedexpansion
 
+:: Always operate from this script's own directory, regardless of
+:: where it was invoked from (e.g. double-clicked, or run via a
+:: shortcut/PATH from a different working directory).
+cd /d "%~dp0"
+
 echo ================================================
-echo   AEGIS Academic Integrity Checker - Installer
+echo   AEGIS Academic Integrity Checker - Offline Setup
 echo ================================================
 echo.
 
@@ -38,52 +43,17 @@ call .venv\Scripts\activate.bat
 echo [..] Upgrading pip...
 python -m pip install --upgrade pip --quiet
 
-:: Choose install mode
-echo.
-echo Install mode:
-echo   1. Minimal  - core only, no ML models (~200 MB)
-echo   2. Full     - all detectors, ML models (~2 GB download)
-echo   3. Docker   - skip Python install, use Docker instead
-echo.
-set /p CHOICE="Enter 1, 2, or 3 [default: 1]: "
-if "%CHOICE%"=="" set CHOICE=1
-
-if "%CHOICE%"=="1" (
-    echo [..] Installing core dependencies...
-    pip install -e . --quiet
-    if !ERRORLEVEL! neq 0 goto :installerror
-    echo [OK] Core installation complete.
-)
-
-if "%CHOICE%"=="2" (
-    echo [..] Installing all dependencies (this may take 5-15 minutes)...
-    pip install -e ".[ml,nlp,bib]" --quiet
-    if !ERRORLEVEL! neq 0 goto :installerror
-    echo [..] Downloading spaCy English model...
-    python -m spacy download en_core_web_sm
-    echo [OK] Full installation complete.
-)
-
-if "%CHOICE%"=="3" (
-    docker --version >nul 2>&1
-    if !ERRORLEVEL! neq 0 (
-        echo [ERROR] Docker not found. Install Docker Desktop from https://docker.com
-        pause
-        exit /b 1
-    )
-    echo [..] Building and starting AEGIS with Docker...
-    docker compose up --build -d
-    echo [OK] AEGIS API running at http://localhost:8000
-    echo      Swagger UI: http://localhost:8000/docs
-    pause
-    exit /b 0
-)
+:: Core-only install: no ML models, no extra downloads
+echo [..] Installing core dependencies (~200 MB, no ML models)...
+pip install -e . --quiet
+if !ERRORLEVEL! neq 0 goto :installerror
+echo [OK] Core installation complete.
 
 :: Copy .env if missing
 if not exist ".env" (
     if exist ".env.example" (
         copy ".env.example" ".env" >nul
-        echo [OK] Created .env from template. Edit it to set your email for Crossref API.
+        echo [OK] Created .env from template.
     )
 )
 
@@ -98,8 +68,14 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo ================================================
-echo   Installation complete!
+echo   Setup complete - runs fully offline.
 echo ================================================
+echo.
+echo   Core checks (plagiarism, stylometry, watermark,
+echo   n-gram) need no network access or model downloads.
+echo   AI-detection ML models and citation lookups are
+echo   optional extras - see README for:
+echo     pip install -e ".[ml,nlp,bib]"
 echo.
 echo Quick start:
 echo   aegis analyze paper.pdf --html report.html
