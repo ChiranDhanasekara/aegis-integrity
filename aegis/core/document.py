@@ -111,7 +111,18 @@ class DocumentParser:
 
         doc = Document(str(path))
         paras = [p.text for p in doc.paragraphs if p.text.strip()]
-        full_text = "\n".join(paras)
+        # Double newline, not single: downstream paragraph-level detectors
+        # (AIContentDetector, NGramDetector) split on "\n\n+" to find paragraph
+        # boundaries. A single-newline join leaves no blank lines anywhere in
+        # the text, so the entire document collapses into one "paragraph" and
+        # paragraph-level AI/n-gram detection silently degrades to
+        # document-level for every DOCX submission.
+        full_text = "\n\n".join(paras)
+
+        table_text = self._extract_docx_table_text(doc)
+        if table_text:
+            full_text = full_text + "\n\n" + table_text
+
         sections = self._extract_sections_heuristic(full_text)
         abstract = self._extract_abstract(full_text)
         title = paras[0] if paras else None
@@ -123,6 +134,21 @@ class DocumentParser:
             abstract=abstract, full_text=full_text,
             sections=sections, references=refs,
         )
+
+    def _extract_docx_table_text(self, doc) -> str:
+        """Table cells are not included in doc.paragraphs, so without this
+        a paper's tabular data (common in results sections) is silently
+        dropped from full_text entirely."""
+        blocks = []
+        for table in doc.tables:
+            rows = []
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                if any(cells):
+                    rows.append(" | ".join(cells))
+            if rows:
+                blocks.append("\n".join(rows))
+        return "\n\n".join(blocks)
 
     def _parse_latex(self, path: Path) -> ParsedDocument:
         raw = path.read_text(encoding="utf-8", errors="replace")

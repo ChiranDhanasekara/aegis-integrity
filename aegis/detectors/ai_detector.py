@@ -87,6 +87,12 @@ class AIContentDetector:
 
     BASE_MODEL = "gpt2"             # 500 MB, ~50ms per 512 tokens on CPU
     OBSERVER_MODEL = "gpt2-medium"  # 1.5 GB, used for cross-perplexity ratio
+    # Pinned to a specific commit rather than floating "main" -- an
+    # unpinned from_pretrained() would silently pick up whatever the repo
+    # points to at download time, including a compromised or unexpectedly
+    # changed upload (bandit B615).
+    BASE_MODEL_REVISION = "607a30d783dfa663caf39e06633721c8d4cfcd7e"
+    OBSERVER_MODEL_REVISION = "6dcaa7a952f72f9298047fd5137cd6e4f05f41da"
 
     def __init__(
         self,
@@ -116,15 +122,17 @@ class AIContentDetector:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
             self._torch = torch
-            self._base_tokenizer = AutoTokenizer.from_pretrained(self.BASE_MODEL)
+            self._base_tokenizer = AutoTokenizer.from_pretrained(
+                self.BASE_MODEL, revision=self.BASE_MODEL_REVISION)
             self._base_model = AutoModelForCausalLM.from_pretrained(
-                self.BASE_MODEL).to(self.device)
+                self.BASE_MODEL, revision=self.BASE_MODEL_REVISION).to(self.device)
             self._base_model.eval()
             if self.use_cross_ppl:
                 self._obs_tokenizer = AutoTokenizer.from_pretrained(
-                    self.OBSERVER_MODEL)
+                    self.OBSERVER_MODEL, revision=self.OBSERVER_MODEL_REVISION)
                 self._obs_model = AutoModelForCausalLM.from_pretrained(
-                    self.OBSERVER_MODEL).to(self.device)
+                    self.OBSERVER_MODEL, revision=self.OBSERVER_MODEL_REVISION
+                ).to(self.device)
                 self._obs_model.eval()
         except ImportError:
             raise ImportError(

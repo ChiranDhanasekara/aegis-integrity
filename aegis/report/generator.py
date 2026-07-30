@@ -70,6 +70,8 @@ class ReportGenerator:
             "elapsed_seconds": r.elapsed_seconds,
             "overall_risk": r.overall_risk,
             "flags": r.flags,
+            "network_activity": r.network_activity,
+            "detector_status": r.detector_status,
             "scores": {
                 "plagiarism": r.plagiarism_score,
                 "ai_content": r.ai_score,
@@ -127,6 +129,7 @@ class ReportGenerator:
             }
 
         # Citation integrity
+        d["citation_summary"] = r.citation_summary
         d["citation_integrity"] = [
             {
                 "cite_key": v.cite_key,
@@ -300,6 +303,7 @@ class ReportGenerator:
         flags_html = "".join(
             f'<li>{self._esc(f)}</li>' for f in data["flags"]
         ) or "<li>No flags raised.</li>"
+        privacy_note = self._privacy_disclosure(data.get("network_activity", {}))
 
         ngram_rows = self._ngram_table_rows(data.get("ngram_matches", []))
         semantic_rows = self._semantic_table_rows(data.get("semantic_matches", []))
@@ -361,6 +365,7 @@ class ReportGenerator:
     File: <code>{self._esc(data['submission'])}</code> &nbsp;|&nbsp;
     Analysis time: {data['elapsed_seconds']}s
   </div>
+  <div class="meta">{privacy_note}</div>
 
   <span class="badge">Overall Risk: {data['overall_risk']}</span>
 
@@ -770,6 +775,26 @@ class ReportGenerator:
             f"<p>Hedging density: {co['hedging_density']:.2f} "
             f"&nbsp;|&nbsp; Section template match: {co['section_template_match']*100:.0f}%</p>"
             f"{flags_html}"
+        )
+
+    def _privacy_disclosure(self, network_activity: dict) -> str:
+        if not network_activity:
+            return (
+                "Document content was processed locally and never transmitted anywhere."
+            )
+        contacted = network_activity.get("external_services_contacted", [])
+        if contacted:
+            services = self._esc(", ".join(contacted))
+            return (
+                "Document content was processed locally and never transmitted anywhere. "
+                f"Citation metadata (titles, authors, DOIs) was sent to: <strong>{services}</strong> "
+                "for online verification."
+            )
+        return (
+            "Document content was processed locally and never transmitted anywhere. "
+            "No external services were contacted for this report "
+            f"(citation check: {self._esc(network_activity.get('citation_check_mode', 'unknown'))}, "
+            f"citation network: {self._esc(network_activity.get('citation_network_mode', 'unknown'))})."
         )
 
     # ------------------------------------------------------------------

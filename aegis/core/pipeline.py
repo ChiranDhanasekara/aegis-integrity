@@ -116,6 +116,11 @@ class AnalysisReport:
     semantic_matches: list[SemanticMatch] = field(default_factory=list)
     ai_result: Optional[AIDetectionResult] = None
     citation_verdicts: list[CitationVerdict] = field(default_factory=list)
+    # Coverage/assessment metadata from CitationIntegrityDetector.summary():
+    # total references, how many were independently verified, and whether
+    # the sample is large enough for a percentage-based verdict to be
+    # meaningful (see MIN_REFERENCES_FOR_ASSESSMENT).
+    citation_summary: dict = field(default_factory=dict)
     stylometric_result: Optional[StyleAnalysisResult] = None
     self_plagiarism_result: Optional[SelfPlagiarismResult] = None
 
@@ -137,6 +142,18 @@ class AnalysisReport:
     overall_risk: str = "UNKNOWN"   # LOW | MEDIUM | HIGH | CRITICAL
     flags: list[str] = field(default_factory=list)
     elapsed_seconds: float = 0.0
+
+    # Privacy disclosure: which external services (if any) this specific run
+    # actually contacted. Document content is never sent anywhere; only
+    # citation metadata (titles/authors/DOIs) can leave the machine, and only
+    # when citation checking runs in online mode.
+    network_activity: dict = field(default_factory=dict)
+
+    # Per-detector execution status: {"status": "completed"|"disabled"|
+    # "unavailable"|"failed", "reason": str|None}. A score of 0.0 is
+    # ambiguous on its own -- it means both "ran and found nothing" and
+    # "didn't run at all" unless this is checked too.
+    detector_status: dict = field(default_factory=dict)
 
 
 class AEGISPipeline:
@@ -263,71 +280,112 @@ class AEGISPipeline:
             parsed_document=parsed,
         )
 
-        # 1. N-gram similarity (always runs; no ML dependency)
-        logger.info("Running n-gram detector...")
-        if self._corpus_loaded:
-            report.ngram_matches = self._ngram.find_matches(full_text)
-        else:
+        def _status(name: str, status: str, reason: Optional[str] = None) -> None:
+            report.detector_status[name] = {"status": status, "reason": reason}
+
+        # 1. N-gram similarity (always runs; no ML dependency, no on/off config)
+        if not self._corpus_loaded:
             logger.warning("No corpus loaded; n-gram search skipped")
+            _status("ngram", "unavailable", "no comparison corpus loaded")
+        else:
+            logger.info("Running n-gram detector...")
+            try:
+                report.ngram_matches = self._ngram.find_matches(full_text)
+                _status("ngram", "completed")
+            except Exception as exc:
+                logger.warning("N-gram detector failed: %s", exc)
+                _status("ngram", "failed", str(exc))
 
         # 2. Semantic similarity
-        if self._semantic and self._corpus_loaded:
+        if not self._semantic:
+            _status("semantic", "disabled")
+        elif not self._corpus_loaded:
+            _status("semantic", "unavailable", "no comparison corpus loaded")
+        else:
             logger.info("Running semantic detector...")
             try:
                 report.semantic_matches = self._semantic.find_matches(full_text)
+                _status("semantic", "completed")
             except Exception as exc:
                 logger.warning("Semantic detector failed: %s", exc)
+                _status("semantic", "failed", str(exc))
 
         # 3. AI content detection
-        if self._ai:
+        if not self._ai:
+            _status("ai_content", "disabled")
+        else:
             logger.info("Running AI content detector...")
             try:
                 report.ai_result = self._ai.detect(full_text)
                 report.ai_score = report.ai_result.document_ensemble_score
+                _status("ai_content", "completed")
             except Exception as exc:
                 logger.warning("AI detector failed: %s", exc)
+                _status("ai_content", "failed", str(exc))
 
         # 4. Citation integrity
-        if self._citation and parsed.references:
+        if not self._citation:
+            _status("citation", "disabled")
+        elif not parsed.references:
+            _status("citation", "unavailable", "no references detected in document")
+        else:
             logger.info("Verifying %d references...", len(parsed.references))
             try:
                 report.citation_verdicts = self._citation.verify_references(
                     parsed.references)
-                flagged = sum(
-                    1 for v in report.citation_verdicts
-                    if v.verdict in ("HALLUCINATED", "MISMATCH", "UNRESOLVABLE"))
-                total = max(len(report.citation_verdicts), 1)
-                report.citation_score = round(flagged / total, 3)
+                # citation_score (and the risk levels derived from it) must
+                # only reflect confirmed integrity problems (HALLUCINATED /
+                # MISMATCH), never verdicts that just mean "could not verify"
+                # (UNRESOLVABLE / UNAVAILABLE / NO_DOI / NOT_FOUND_IN_CROSSREF)
+                # -- a network hiccup or an unfamiliar registration agency is
+                # not evidence of a fabricated citation.
+                report.citation_summary = self._citation.summary(report.citation_verdicts)
+                report.citation_score = report.citation_summary["citation_integrity_score"]
+                report.citation_score = round(1.0 - report.citation_score, 3)
+                _status("citation", "completed")
             except Exception as exc:
                 logger.warning("Citation check failed: %s", exc)
+                _status("citation", "failed", str(exc))
 
         # 5. Stylometric analysis
-        if self._stylo:
+        if not self._stylo:
+            _status("stylometric", "disabled")
+        else:
             logger.info("Running stylometric analyzer...")
             try:
                 report.stylometric_result = self._stylo.analyze(
                     full_text, author_baseline=author_style_baseline)
                 report.style_score = round(
                     1.0 - report.stylometric_result.consistency_score, 3)
+                _status("stylometric", "completed")
             except Exception as exc:
                 logger.warning("Stylometric analysis failed: %s", exc)
+                _status("stylometric", "failed", str(exc))
 
         # 6. Self-plagiarism
-        if self._self_plag:
+        if not self._self_plag:
+            _status("self_plagiarism", "disabled")
+        elif not self._self_plag._corpus_index:
+            _status("self_plagiarism", "unavailable", "no prior works loaded")
+        else:
             logger.info("Running self-plagiarism detector...")
             try:
                 report.self_plagiarism_result = self._self_plag.check_submission(
                     full_text)
                 report.self_recycle_score = round(
                     report.self_plagiarism_result.overall_overlap_pct / 100.0, 3)
+                _status("self_plagiarism", "completed")
             except Exception as exc:
                 logger.warning("Self-plagiarism detection failed: %s", exc)
+                _status("self_plagiarism", "failed", str(exc))
 
         # 7. Aggregate plagiarism score
         report.plagiarism_score = self._aggregate_plagiarism_score(report)
 
         # 8. LLM watermark detection
-        if self._watermark:
+        if not self._watermark:
+            _status("watermark", "disabled")
+        else:
             logger.info("Running LLM watermark detector...")
             try:
                 report.watermark_result = self._watermark.detect(full_text)
@@ -335,11 +393,23 @@ class AEGISPipeline:
                 report.watermark_score = (
                     wr.confidence if wr.evidence_status in ("experimental", "scheme_verified") else 0.0
                 )
+                _status(
+                    "watermark",
+                    {"completed": "completed", "skipped": "disabled",
+                     "unavailable": "unavailable", "failed": "failed"}.get(
+                        wr.status.value, "completed"),
+                    wr.error_code,
+                )
             except Exception as exc:
                 logger.warning("Watermark detector failed: %s", exc)
+                _status("watermark", "failed", str(exc))
 
         # 9. Citation network analysis
-        if self._citation_network and report.citation_verdicts:
+        if not self._citation_network:
+            _status("citation_network", "disabled")
+        elif not report.citation_verdicts:
+            _status("citation_network", "unavailable", "no verified references to analyze")
+        else:
             logger.info("Running citation network analysis...")
             try:
                 submission_authors = []
@@ -350,21 +420,52 @@ class AEGISPipeline:
                 ]
                 report.citation_network_result = self._citation_network.analyze(
                     report.citation_verdicts)
+                _status("citation_network", "completed")
             except Exception as exc:
                 logger.warning("Citation network analysis failed: %s", exc)
+                _status("citation_network", "failed", str(exc))
 
         # 10. Semantic coherence analysis
-        if self._coherence:
+        if not self._coherence:
+            _status("coherence", "disabled")
+        else:
             logger.info("Running coherence analyzer...")
             try:
                 report.coherence_result = self._coherence.analyze(full_text)
                 report.coherence_score = report.coherence_result.ensemble_score
+                _status("coherence", "completed")
             except Exception as exc:
                 logger.warning("Coherence analysis failed: %s", exc)
+                _status("coherence", "failed", str(exc))
 
         # 11. Overall risk and flags
         report.overall_risk, report.flags = self._assess_overall_risk(report)
         report.elapsed_seconds = round(time.time() - t0, 2)
+
+        contacted = []
+        citation_online = (
+            self.cfg.run_citation_check and not self.cfg.citation_offline
+            and len(report.citation_verdicts) > 0
+        )
+        if citation_online:
+            contacted.append("Crossref")
+        if (report.citation_network_result
+                and report.citation_network_result.openalex_queried):
+            contacted.append("OpenAlex")
+        report.network_activity = {
+            "document_content_transmitted": False,
+            "citation_check_mode": (
+                "offline" if self.cfg.citation_offline
+                else "online" if self.cfg.run_citation_check
+                else "disabled"
+            ),
+            "citation_network_mode": (
+                "offline" if self.cfg.citation_network_offline
+                else "online" if self.cfg.run_citation_network
+                else "disabled"
+            ),
+            "external_services_contacted": contacted,
+        }
 
         logger.info(
             "Analysis complete in %.1fs. Overall risk: %s",
@@ -461,9 +562,34 @@ class AEGISPipeline:
                 f"({report.coherence_result.verdict})"
             )
 
-        # Determine overall risk level
-        hallucinated_count = sum(
-            1 for v in report.citation_verdicts if v.verdict == "HALLUCINATED")
+        # Determine overall risk level.
+        #
+        # Citation findings only get to influence risk when the sample is
+        # large enough for a percentage (or a hallucination count) to mean
+        # anything -- CitationIntegrityDetector.summary() marks the
+        # assessment INCONCLUSIVE below MIN_REFERENCES_FOR_ASSESSMENT
+        # references or MIN_COVERAGE_FOR_ASSESSMENT verification coverage.
+        # Without this gate, a single false HALLUCINATED verdict out of one
+        # detected reference reads as "100% of citations are fabricated" and
+        # forces CRITICAL on its own -- exactly the failure mode this guards
+        # against. citation_summary defaults to {} when citation checking
+        # didn't run, in which case citation_score is already 0.0 and this
+        # gate has no effect either way.
+        citation_reliable = report.citation_summary.get("assessment") != "INCONCLUSIVE"
+        hallucinated_count = (
+            sum(1 for v in report.citation_verdicts if v.verdict == "HALLUCINATED")
+            if citation_reliable else 0
+        )
+        citation_score_for_risk = report.citation_score if citation_reliable else 0.0
+        if not citation_reliable and report.citation_summary:
+            flags.append(
+                "Citation assessment: INCONCLUSIVE "
+                f"({report.citation_summary.get('total_references', 0)} reference(s), "
+                f"{report.citation_summary.get('verification_coverage', 0.0):.0%} verified) "
+                "-- too few references or too little verification coverage for a "
+                "percentage-based citation risk to be meaningful; citation findings "
+                "are not factored into the overall risk level."
+            )
 
         sp_risk = (report.self_plagiarism_result.risk_level
                    if report.self_plagiarism_result else "LOW")
@@ -478,14 +604,14 @@ class AEGISPipeline:
         elif (report.plagiarism_score > 0.40 or
               report.ai_score > 0.70 or
               sp_risk == "HIGH" or
-              report.citation_score > 0.30 or
+              citation_score_for_risk > 0.30 or
               network_risk == "HIGH" or
               report.coherence_score > 0.75):
             risk = "HIGH"
         elif (report.plagiarism_score > 0.20 or
               report.ai_score > 0.50 or
               sp_risk == "MEDIUM" or
-              report.citation_score > 0.10 or
+              citation_score_for_risk > 0.10 or
               report.style_score > 0.30 or
               network_risk == "MEDIUM" or
               report.coherence_score > 0.50):

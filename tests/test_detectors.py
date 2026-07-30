@@ -280,37 +280,113 @@ class TestCitationIntegrityDetector:
             "deep learning for network security")
         assert 0.0 < sim < 1.0
 
-    def test_summary_all_valid(self):
-        from aegis.detectors.citation import CitationIntegrityDetector, CitationVerdict
+    def test_title_extraction_prefers_quoted_title_over_author_fragments(self):
+        """Real bug: multi-author IEEE references with abbreviated initials
+        (each 'X.' looks like a sentence boundary to a naive ". " split)
+        used to return an author-name fragment like 'Manadhata, R' as the
+        title. The quoted title must win regardless of how many periods
+        appear in the author list before it."""
+        from aegis.detectors.citation import CitationIntegrityDetector
         det = CitationIntegrityDetector()
-        verdicts = [
-            CitationVerdict(
-                cite_key="a", raw_text="", doi="10.1/a",
-                claimed_year="2023", claimed_authors=[], claimed_title="T",
-                resolved_title="T", resolved_authors=[], resolved_year="2023",
-                resolved_journal="J", verdict="VALID", confidence=1.0,
-                issues=[], crossref_url=None,
+        raw = (
+            'P. Manadhata, R. Mireshghallah, and K. Chen, '
+            '"Detecting citation cartels in academic papers," '
+            'IEEE Trans. Info. Forensics, 2023.'
+        )
+        title = det._extract_title_from_raw(raw)
+        assert title == "Detecting citation cartels in academic papers"
+
+    def test_title_extraction_skips_author_fragments_without_quotes(self):
+        """Fallback path (no quoted title present) must still skip
+        surname+initial fragments left over from the author list instead
+        of returning the first one that happens to be long enough."""
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        raw = (
+            "P. Manadhata, R. Mireshghallah, and K. Chen. "
+            "Detecting citation cartels in academic papers. "
+            "IEEE Trans. Info. Forensics. 2023."
+        )
+        title = det._extract_title_from_raw(raw)
+        assert title == "Detecting citation cartels in academic papers"
+
+    def test_author_fragment_regex_matches_known_false_positives(self):
+        """Exact fragments previously mis-extracted as titles in production."""
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        for fragment in ("Gentyala, F", "Mireshghallah, K", "Manadhata, and R", "and R"):
+            assert det._AUTHOR_FRAGMENT_RE.match(fragment), (
+                f"'{fragment}' should be recognized as an author-list fragment"
             )
-        ]
+
+    def test_real_title_not_misidentified_as_author_fragment(self):
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        assert not det._AUTHOR_FRAGMENT_RE.match(
+            "Detecting citation cartels in academic papers")
+        assert not det._AUTHOR_FRAGMENT_RE.match(
+            "GPT detectors are biased against non-native English writers")
+
+    def _make_verdict(self, key, doi, verdict, title="T", year="2023"):
+        from aegis.detectors.citation import CitationVerdict
+        return CitationVerdict(
+            cite_key=key, raw_text="", doi=doi,
+            claimed_year=year, claimed_authors=[], claimed_title=title,
+            resolved_title=title if verdict == "VALID" else None,
+            resolved_authors=[], resolved_year=year if verdict == "VALID" else None,
+            resolved_journal="J" if verdict == "VALID" else None,
+            verdict=verdict, confidence=1.0 if verdict == "VALID" else 0.95,
+            issues=[] if verdict == "VALID" else ["issue"], crossref_url=None,
+        )
+
+    def test_summary_all_valid(self):
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        verdicts = [self._make_verdict("a", "10.1/a", "VALID")]
         s = det.summary(verdicts)
         assert s["citation_integrity_score"] == pytest.approx(1.0)
-        assert s["risk_level"] == "LOW"
+        assert s["flagged_count"] == 0
 
-    def test_summary_hallucinated(self):
-        from aegis.detectors.citation import CitationIntegrityDetector, CitationVerdict
+    def test_summary_single_reference_is_inconclusive(self):
+        """Below MIN_REFERENCES_FOR_ASSESSMENT, a percentage-based verdict
+        (even 100% or 0% flagged) is not statistically meaningful -- this
+        is the exact shape of the real "100% Citation Issues from one
+        low-confidence reference" bug."""
+        from aegis.detectors.citation import CitationIntegrityDetector
         det = CitationIntegrityDetector()
-        verdicts = [
-            CitationVerdict(
-                cite_key="b", raw_text="", doi="10.1/b",
-                claimed_year="2020", claimed_authors=[], claimed_title="Fake",
-                resolved_title=None, resolved_authors=[], resolved_year=None,
-                resolved_journal=None, verdict="HALLUCINATED", confidence=0.95,
-                issues=["DOI not found"], crossref_url=None,
-            )
-        ]
+        verdicts = [self._make_verdict("b", "10.1/b", "HALLUCINATED", title="Fake")]
         s = det.summary(verdicts)
+        assert s["assessment"] == "INCONCLUSIVE"
+        assert s["risk_level"] == "INCONCLUSIVE"
+        assert s["flagged_count"] == 1
+
+    def test_summary_hallucinated_with_adequate_sample_is_high_risk(self):
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        verdicts = (
+            [self._make_verdict("h", "10.1/h", "HALLUCINATED", title="Fake")]
+            + [self._make_verdict(f"v{i}", f"10.1/v{i}", "VALID") for i in range(5)]
+        )
+        s = det.summary(verdicts)
+        assert s["assessment"] == "ASSESSED"
         assert s["risk_level"] == "HIGH"
         assert s["flagged_count"] == 1
+        assert s["total_references"] == 6
+
+    def test_summary_low_coverage_is_inconclusive_even_with_many_references(self):
+        """Many references but most UNRESOLVABLE (couldn't verify) should
+        not produce a confident risk level either -- low coverage, not just
+        a low count, must also trigger INCONCLUSIVE."""
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        verdicts = (
+            [self._make_verdict("v", "10.1/v", "VALID")]
+            + [self._make_verdict(f"u{i}", None, "UNRESOLVABLE") for i in range(9)]
+        )
+        s = det.summary(verdicts)
+        assert s["total_references"] == 10
+        assert s["verification_coverage"] < 0.80
+        assert s["assessment"] == "INCONCLUSIVE"
 
     def _mock_session(self, responses: dict):
         """responses: {url_substring: (status_code, json_dict)}"""
@@ -373,6 +449,71 @@ class TestCitationIntegrityDetector:
             ref = self._make_ref(doi="10.1/slow", title="A Paper")
             verdict = det._verify_one(ref)
         assert verdict.verdict == "UNAVAILABLE"
+
+    def test_datacite_metadata_matching_claim_is_valid(self):
+        """When a DOI is DataCite-registered, AEGIS should now verify the
+        actual metadata against DataCite rather than just confirming the
+        DOI exists somewhere."""
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        session = self._mock_session({
+            "api.datacite.org": (200, {"data": {"attributes": {
+                "titles": [{"title": "GPT detectors are biased against non-native English writers"}],
+                "creators": [{"familyName": "Liang", "givenName": "Weixin"}],
+                "publicationYear": 2023,
+                "container": {"title": "Patterns"},
+            }}}),
+            "/agency": (200, {"message": {"agency": {"id": "datacite"}}}),
+            "": (404, {}),
+        })
+        with patch.object(det, "_get_session", return_value=session):
+            ref = self._make_ref(
+                doi="10.48550/arXiv.2304.02819",
+                title="GPT detectors are biased against non-native English writers",
+                year="2023",
+                authors=["Weixin Liang"],
+            )
+            verdict = det._verify_one(ref)
+        assert verdict.verdict == "VALID"
+        assert verdict.resolved_title == "GPT detectors are biased against non-native English writers"
+
+    def test_datacite_metadata_mismatching_claim_is_flagged(self):
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        session = self._mock_session({
+            "api.datacite.org": (200, {"data": {"attributes": {
+                "titles": [{"title": "A Completely Unrelated Paper About Whale Migration"}],
+                "creators": [{"familyName": "Nguyen", "givenName": "Trang"}],
+                "publicationYear": 2019,
+                "container": {"title": "Marine Biology"},
+            }}}),
+            "/agency": (200, {"message": {"agency": {"id": "datacite"}}}),
+            "": (404, {}),
+        })
+        with patch.object(det, "_get_session", return_value=session):
+            ref = self._make_ref(
+                doi="10.48550/arXiv.9999.99999",
+                title="GPT detectors are biased against non-native English writers",
+                year="2023",
+                authors=["Weixin Liang"],
+            )
+            verdict = det._verify_one(ref)
+        assert verdict.verdict in ("MISMATCH", "HALLUCINATED")
+
+    def test_datacite_lookup_failure_falls_back_to_pass_through(self):
+        """A DataCite outage must not produce a false HALLUCINATED verdict --
+        it should fall back to the existing not-independently-verified path."""
+        from aegis.detectors.citation import CitationIntegrityDetector
+        det = CitationIntegrityDetector()
+        session = self._mock_session({
+            "api.datacite.org": (500, {}),
+            "/agency": (200, {"message": {"agency": {"id": "datacite"}}}),
+            "": (404, {}),
+        })
+        with patch.object(det, "_get_session", return_value=session):
+            ref = self._make_ref(doi="10.48550/arXiv.2304.02819", title="A Paper")
+            verdict = det._verify_one(ref)
+        assert verdict.verdict == "NOT_FOUND_IN_CROSSREF"
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 # AEGIS Academic Integrity Checker
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.2.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.3.0-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/offline-first-orange?style=for-the-badge" alt="Offline">
@@ -295,6 +295,13 @@ curl -X POST http://localhost:8000/batch \
 
 ## Report Fields (v2.1)
 
+`detector_status` distinguishes "this detector found nothing" from "this detector
+didn't run" -- a 0.0 score alone is ambiguous between a disabled detector, a
+missing corpus, and a genuinely clean result. `citation_summary.assessment` is
+`"INCONCLUSIVE"` (rather than a confident risk level) when fewer than 5
+references were detected or verification coverage is below 80% -- a single
+low-confidence reference should never read as "100% of citations are fabricated."
+
 ```json
 {
   "overall_risk": "HIGH",
@@ -306,10 +313,32 @@ curl -X POST http://localhost:8000/batch \
     "self_recycling_pct": 4.2
   },
   "flags": ["AI content detected: AI_LIKELY (score=0.71)", "..."],
+  "network_activity": {
+    "document_content_transmitted": false,
+    "citation_check_mode": "online",
+    "citation_network_mode": "online",
+    "external_services_contacted": ["Crossref", "OpenAlex"]
+  },
+  "detector_status": {
+    "ngram": {"status": "completed", "reason": null},
+    "semantic": {"status": "disabled", "reason": null},
+    "ai_content": {"status": "completed", "reason": null},
+    "citation": {"status": "completed", "reason": null},
+    "self_plagiarism": {"status": "unavailable", "reason": "no prior works loaded"},
+    "...": "one entry per detector -- completed | disabled | unavailable | failed"
+  },
   "ai_detection": {
     "document_verdict": "AI_LIKELY",
     "ai_fraction": 0.62,
     "paragraph_scores": [...]
+  },
+  "citation_summary": {
+    "total_references": 22,
+    "references_with_identifier": 20,
+    "references_verified": 19,
+    "verification_coverage": 0.864,
+    "assessment": "ASSESSED",
+    "risk_level": "MEDIUM"
   },
   "citation_integrity": [...],
   "citation_network": {
@@ -472,6 +501,55 @@ Website: [sunilgentyala.github.io/aegis-integrity](https://sunilgentyala.github.
 ---
 
 ## Changelog
+
+### v2.3.0 (July 2026)
+Follow-up audit fixes from testing against real manuscripts, plus CI/security
+hardening. Second consecutive minor bump for behavioral fixes, not a patch:
+- **FIX (correctness, high severity):** DOCX paragraphs were joined with a
+  single `\n`, but paragraph-level detectors (AI content, n-gram) split on
+  `\n\n+` to find paragraph boundaries -- every DOCX submission silently
+  collapsed into one giant "paragraph," disabling paragraph-level AI/n-gram
+  detection entirely for that format. Also now extracts table cell text,
+  previously dropped completely.
+- **FIX (correctness, high severity):** A single low-confidence reference
+  verdict (even from one detected citation) could read as "100% Citation
+  Issues" and independently force `overall_risk` to CRITICAL. Citation
+  findings now only influence risk once there's an adequate sample
+  (>=5 references, >=80% verification coverage); below that, the report
+  says `"assessment": "INCONCLUSIVE"` instead of a false-confidence verdict.
+  `UNRESOLVABLE` verdicts (network/parse failures) no longer count toward
+  `citation_score` either -- only confirmed `HALLUCINATED`/`MISMATCH` do.
+- **FIX (correctness):** DataCite-registered DOIs (arXiv's `10.48550/*`
+  prefix, etc.) previously only got a generic "not independently verified"
+  pass-through after the Crossref-404/agency-check fix in v2.2.0. AEGIS now
+  queries DataCite's own REST API for real title/author/year metadata and
+  runs the same comparison used for Crossref results.
+- **FIX (correctness):** Reference title extraction sometimes returned an
+  author-list fragment (e.g. "Gentyala, F", "Mireshghallah, K") as the
+  "title" when splitting on ". " hit an abbreviated author initial before
+  reaching the real title -- a long-known false-positive source. Now
+  prefers a quoted title (present in most citation styles) and, in the
+  fallback path, explicitly skips fragments matching the surname+initial
+  shape instead of returning the first sufficiently-long fragment.
+- **FIX (transparency):** The report footer claimed "no data transmitted to
+  third parties" unconditionally, even though citation checking contacts
+  Crossref/DataCite and citation-network analysis contacts OpenAlex by
+  default. Reports now include `network_activity` stating exactly which
+  services (if any) were contacted for that specific run.
+- **NEW:** `detector_status` in every report: each of the 9 detectors reports
+  `completed` / `disabled` / `unavailable` / `failed` with a reason. A 0.0
+  score used to be ambiguous between "ran and found nothing," "was disabled,"
+  "had no corpus to compare against," and "raised an exception that got
+  logged and silently swallowed" -- these are now distinguishable.
+- **FIX (security):** Pinned the GPT-2 / GPT-2-medium model revisions used
+  by the AI content detector (bandit B615: unpinned Hugging Face downloads)
+  and marked the watermark heuristic's non-cryptographic MD5 bucketing hash
+  as `usedforsecurity=False` (bandit B324).
+- **NEW:** CI (GitHub Actions): test matrix across Python 3.9-3.12 with a
+  coverage gate (60%, the current baseline -- 80% is a follow-up target,
+  not enforced yet), `ruff check`, `bandit`, and a Docker build + healthcheck
+  smoke test. `pip-audit` runs for visibility but doesn't block on
+  transitive-dependency CVEs.
 
 ### v2.2.0 (July 2026)
 Behavioral and security fixes from an independent audit -- not documentation-only,

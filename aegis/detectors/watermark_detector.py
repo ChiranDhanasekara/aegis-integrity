@@ -153,7 +153,11 @@ class LLMWatermarkDetector:
         """
         words = text.lower().split()
         return [
-            int(hashlib.md5(w.encode()).hexdigest(), 16) % self.vocab_size
+            # usedforsecurity=False: this is a deterministic bucketing hash
+            # for a statistical heuristic, not a cryptographic or security
+            # use of MD5.
+            int(hashlib.md5(w.encode(), usedforsecurity=False).hexdigest(), 16)
+            % self.vocab_size
             for w in words
             if w.isalpha()
         ]

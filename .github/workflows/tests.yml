@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11"]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -20,9 +20,69 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
-      - name: Install core dependencies
-        run: pip install -e . pytest
+      - name: Install dependencies (full install, matches production)
+        run: |
+          pip install -e ".[ml,nlp,bib]" pytest pytest-cov
 
-      - name: Run tests
-        run: pytest tests/ -v --tb=short
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --tb=short --cov=aegis --cov-report=term-missing --cov-fail-under=60
+        # 60% reflects the current baseline (see coverage report) so this
+        # gate catches regressions rather than being red on day one; the
+        # audit's target of 80% is a follow-up coverage-improvement effort,
+        # not something this run enforces yet.
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - name: ruff check
+        run: ruff check aegis/
+        # ruff format --check is intentionally not enforced yet: the
+        # existing codebase predates ruff's formatter and running it would
+        # be a large, purely-cosmetic diff across most files. Revisit as a
+        # deliberate one-time reformat, not a silent CI gate.
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[ml,nlp,bib]" bandit pip-audit
+      - name: bandit (static analysis of aegis/ source)
+        run: bandit -r aegis/ -ll
+      - name: pip-audit (dependency vulnerability scan)
+        run: pip-audit || true
+        # Non-blocking: transitive-dependency CVEs get published on a
+        # schedule this project doesn't control, and many are not
+        # exploitable given how a given library is actually used here.
+        # Surfacing them for visibility is the goal; blocking every merge
+        # on every upstream CVE is not viable without dedicated triage time.
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t aegis-integrity:ci .
+      - name: Start container and check healthcheck
+        run: |
+          docker run -d --name aegis-ci -p 8000:8000 aegis-integrity:ci
+          for i in $(seq 1 20); do
+            status=$(docker inspect --format='{{.State.Health.Status}}' aegis-ci 2>/dev/null || echo "starting")
+            echo "healthcheck status: $status"
+            if [ "$status" = "healthy" ]; then exit 0; fi
+            if [ "$status" = "unhealthy" ]; then docker logs aegis-ci; exit 1; fi
+            sleep 5
+          done
+          echo "Healthcheck did not become healthy in time"
+          docker logs aegis-ci
+          exit 1

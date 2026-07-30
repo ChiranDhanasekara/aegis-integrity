@@ -13,9 +13,12 @@ No existing open-source plagiarism tool validates citations. This module:
 A Crossref 404 on /works/{doi} means "not a Crossref record," not "fake DOI":
 DataCite-registered DOIs (e.g. arXiv's 10.48550/* prefix) always 404 against
 Crossref even when valid, so a 404 triggers a registration-agency check via
-/works/{doi}/agency before HALLUCINATED is returned. Transient failures
-(timeouts, 429, 5xx) are reported as UNAVAILABLE rather than folded into a
-verdict about the citation itself.
+/works/{doi}/agency before HALLUCINATED is returned. When the agency is
+DataCite, its own REST API (api.datacite.org) is queried for real metadata
+and compared against the claimed citation the same way Crossref results are,
+rather than only confirming the DOI exists. Transient failures (timeouts,
+429, 5xx) are reported as UNAVAILABLE rather than folded into a verdict
+about the citation itself.
 
 A peer-reviewed study found ChatGPT fabricated up to 55% of references
 depending on model version (Walters & Wilder, Scientific Reports, 2023,
@@ -65,6 +68,7 @@ class CitationIntegrityDetector:
 
     CROSSREF_BASE = "https://api.crossref.org/works"
     PUBMED_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+    DATACITE_BASE = "https://api.datacite.org/dois"
 
     def __init__(
         self,
@@ -117,7 +121,6 @@ class CitationIntegrityDetector:
         claimed_year = ref.year
         claimed_authors = ref.authors or []
         claimed_title = ref.title or self._extract_title_from_raw(raw)
-        issues = []
 
         if self.offline or not doi:
             # Try title-based lookup if no DOI
@@ -186,13 +189,25 @@ class CitationIntegrityDetector:
 
         crossref_url = data.get("URL", f"https://doi.org/{doi}")
 
-        # --- Compare claimed vs resolved ---
+        return self._build_comparison_verdict(
+            ref, doi, raw, claimed_year, claimed_authors, claimed_title,
+            resolved_title, resolved_authors, pub_year, journal_title, crossref_url,
+        )
+
+    def _build_comparison_verdict(
+        self, ref, doi, raw, claimed_year, claimed_authors, claimed_title,
+        resolved_title, resolved_authors, resolved_year, resolved_journal, source_url,
+    ) -> CitationVerdict:
+        """Shared claimed-vs-resolved comparison, usable against metadata
+        resolved from Crossref or from DataCite (or any future source that
+        returns title/authors/year in this shape)."""
+        issues: list[str] = []
         verdict = "VALID"
         confidence = 1.0
 
         # Year check
-        if claimed_year and pub_year and claimed_year != pub_year:
-            issues.append(f"Year mismatch: claimed {claimed_year}, actual {pub_year}")
+        if claimed_year and resolved_year and claimed_year != resolved_year:
+            issues.append(f"Year mismatch: claimed {claimed_year}, actual {resolved_year}")
             verdict = "MISMATCH"
             confidence -= 0.3
 
@@ -233,12 +248,12 @@ class CitationIntegrityDetector:
             claimed_title=claimed_title,
             resolved_title=resolved_title,
             resolved_authors=resolved_authors,
-            resolved_year=pub_year,
-            resolved_journal=journal_title,
+            resolved_year=resolved_year,
+            resolved_journal=resolved_journal,
             verdict=verdict,
             confidence=confidence,
             issues=issues,
-            crossref_url=crossref_url,
+            crossref_url=source_url,
         )
 
     def _lookup_by_title(self, ref, title: str) -> CitationVerdict:
@@ -286,6 +301,13 @@ class CitationIntegrityDetector:
                 agency = (
                     r.json().get("message", {}).get("agency", {}).get("id", "")
                 ).lower()
+                if agency == "datacite":
+                    datacite_verdict = self._lookup_datacite(ref, doi)
+                    if datacite_verdict is not None:
+                        return datacite_verdict
+                    # DataCite lookup itself failed (network/parse error) --
+                    # fall through to the generic not-found-here pass-through
+                    # below rather than silently claiming HALLUCINATED.
                 if agency and agency != "crossref":
                     return CitationVerdict(
                         cite_key=ref.cite_key or "unknown",
@@ -302,8 +324,9 @@ class CitationIntegrityDetector:
                         confidence=0.3,
                         issues=[
                             f"DOI {doi} is registered with {agency}, not Crossref -- "
-                            "AEGIS only queries Crossref, so this citation could not "
-                            "be independently verified. Check the DOI manually."
+                            "AEGIS does not yet verify metadata from this agency, so "
+                            "this citation could not be independently verified. "
+                            "Check the DOI manually."
                         ],
                         crossref_url=f"https://doi.org/{doi}",
                     )
@@ -328,6 +351,46 @@ class CitationIntegrityDetector:
             confidence=0.95,
             issues=[f"DOI {doi} does not exist in Crossref or any other registration agency"],
             crossref_url=url,
+        )
+
+    def _lookup_datacite(self, ref, doi: str) -> Optional[CitationVerdict]:
+        """
+        Resolve a DataCite-registered DOI (e.g. arXiv's 10.48550/* prefix)
+        against DataCite's own REST API and run the same claimed-vs-resolved
+        comparison used for Crossref, instead of only confirming the DOI
+        exists without checking its metadata.
+
+        Returns None (rather than raising) on any failure so the caller can
+        fall back to the generic not-found-here pass-through -- a DataCite
+        outage should not produce a false HALLUCINATED verdict.
+        """
+        try:
+            session = self._get_session()
+            r = session.get(f"{self.DATACITE_BASE}/{doi}", timeout=self.timeout)
+            if r.status_code != 200:
+                return None
+            attrs = r.json().get("data", {}).get("attributes", {})
+        except Exception:
+            return None
+
+        titles = attrs.get("titles") or []
+        resolved_title = titles[0].get("title") if titles else None
+
+        resolved_authors = [
+            f"{c.get('familyName', '')} {c.get('givenName', '')[:1]}".strip()
+            for c in (attrs.get("creators") or [])
+            if c.get("familyName")
+        ]
+
+        resolved_year = attrs.get("publicationYear")
+        resolved_year = str(resolved_year) if resolved_year else None
+
+        resolved_journal = (attrs.get("container") or {}).get("title")
+
+        return self._build_comparison_verdict(
+            ref, doi, ref.raw or "", ref.year, ref.authors or [], ref.title,
+            resolved_title, resolved_authors, resolved_year, resolved_journal,
+            f"https://doi.org/{doi}",
         )
 
     def _unavailable(self, ref, doi: str, reason: str) -> CitationVerdict:
@@ -387,13 +450,37 @@ class CitationIntegrityDetector:
             crossref_url=None,
         )
 
+    # Matches a leftover author-list fragment after splitting on ". " --
+    # e.g. "Gentyala, F", "Lee, and R", "and R" -- a surname followed by a
+    # single initial, not a title. Splitting on ". " breaks on every
+    # abbreviated author initial (each is itself "X.") in addition to real
+    # sentence boundaries, so multi-author IEEE/ACM-style references
+    # fragment into several of these before reaching the actual title.
+    _AUTHOR_FRAGMENT_RE = re.compile(
+        r"^(?:[A-Z][a-zA-Z\-']*,?\s*)?(?:and\s+)?[A-Z]\.?$")
+
     def _extract_title_from_raw(self, raw: str) -> Optional[str]:
-        # Heuristic: text between author block and journal/year
+        # Most citation styles (IEEE, ACM, many journals) quote the title
+        # verbatim -- this is a much more reliable signal than guessing from
+        # sentence-split position, and unaffected by how many periods
+        # appear in the author list before it.
+        quoted = re.search(r'["“]([^"”]{10,300})["”]', raw)
+        if quoted:
+            return quoted.group(1).strip().rstrip(",")
+
+        # Fallback for styles that don't quote the title: split on ". " and
+        # skip any part that looks like a leftover author-initial fragment
+        # rather than assuming the title is always parts[1] or parts[2].
         parts = re.split(r"\.\s+", raw)
-        for part in parts[1:3]:
+        for part in parts[1:6]:
             part = part.strip()
-            if 10 < len(part) < 200 and not re.match(r"^(19|20)\d{2}", part):
-                return part
+            if not (10 < len(part) < 200):
+                continue
+            if re.match(r"^(19|20)\d{2}", part):
+                continue
+            if self._AUTHOR_FRAGMENT_RE.match(part):
+                continue
+            return part
         return None
 
     def _string_similarity(self, a: str, b: str) -> float:
@@ -409,6 +496,18 @@ class CitationIntegrityDetector:
         union = len(words_a | words_b)
         return inter / union if union else 0.0
 
+    # Below this many references, or below this coverage fraction, a
+    # percentage like "100% Citation Issues" is not statistically meaningful
+    # (one low-confidence parsed reference flagged out of one detected is
+    # not the same claim as one out of thirty) -- report INCONCLUSIVE instead.
+    MIN_REFERENCES_FOR_ASSESSMENT = 5
+    MIN_COVERAGE_FOR_ASSESSMENT = 0.80
+
+    # Verdicts where AEGIS actually obtained authoritative metadata (from
+    # Crossref or DataCite) to compare against the claim -- as opposed to
+    # verdicts that only mean "could not independently verify this one".
+    _VERIFIED_VERDICTS = frozenset({"VALID", "MISMATCH", "HALLUCINATED"})
+
     def summary(self, verdicts: list[CitationVerdict]) -> dict:
         total = len(verdicts)
         counts = {}
@@ -418,12 +517,27 @@ class CitationIntegrityDetector:
         mismatch = counts.get("MISMATCH", 0)
         flagged = hallucinated + mismatch
         integrity_score = round(1.0 - (flagged / total), 3) if total else 1.0
+
+        with_identifier = sum(1 for v in verdicts if v.doi)
+        verified = sum(1 for v in verdicts if v.verdict in self._VERIFIED_VERDICTS)
+        coverage = round(verified / total, 3) if total else 0.0
+
+        inconclusive = (
+            total < self.MIN_REFERENCES_FOR_ASSESSMENT
+            or coverage < self.MIN_COVERAGE_FOR_ASSESSMENT
+        )
+
         return {
             "total_references": total,
+            "references_with_identifier": with_identifier,
+            "references_verified": verified,
+            "verification_coverage": coverage,
             "verdict_counts": counts,
             "flagged_count": flagged,
             "citation_integrity_score": integrity_score,
+            "assessment": "INCONCLUSIVE" if inconclusive else "ASSESSED",
             "risk_level": (
+                "INCONCLUSIVE" if inconclusive else
                 "HIGH" if hallucinated > 0 else
                 "MEDIUM" if mismatch > 1 else
                 "LOW"
