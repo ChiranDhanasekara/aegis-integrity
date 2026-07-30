@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-2.3.0-blue?style=for-the-badge" alt="Version">
-  <img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/offline-first-orange?style=for-the-badge" alt="Offline">
   <img src="https://img.shields.io/badge/bias--aware-ESL%20calibrated-purple?style=for-the-badge" alt="Bias Aware">
@@ -545,11 +545,18 @@ hardening. Second consecutive minor bump for behavioral fixes, not a patch:
   by the AI content detector (bandit B615: unpinned Hugging Face downloads)
   and marked the watermark heuristic's non-cryptographic MD5 bucketing hash
   as `usedforsecurity=False` (bandit B324).
-- **NEW:** CI (GitHub Actions): test matrix across Python 3.9-3.12 with a
+- **NEW:** CI (GitHub Actions): test matrix across Python 3.10-3.12 with a
   coverage gate (60%, the current baseline -- 80% is a follow-up target,
-  not enforced yet), `ruff check`, `bandit`, and a Docker build + healthcheck
-  smoke test. `pip-audit` runs for visibility but doesn't block on
-  transitive-dependency CVEs.
+  not enforced yet), `ruff check` (pinned to the version actually run
+  against this codebase, not "latest" -- a ruff minor release changing
+  default rules would otherwise break this gate with no code change),
+  `bandit`, and a Docker build + healthcheck smoke test. `pip-audit` runs
+  for visibility but doesn't block on transitive-dependency CVEs.
+- **CHANGED:** Dropped Python 3.9 support. It reached end of life in
+  October 2025, and spacy's current dependency chain (`thinc>=8.3.12`) no
+  longer publishes a build for it -- the full `[ml,nlp,bib]` install is no
+  longer installable on 3.9 regardless of anything in this project.
+  `python_requires` is now `>=3.10`.
 
 ### v2.2.0 (July 2026)
 Behavioral and security fixes from an independent audit -- not documentation-only,

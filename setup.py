@@ -30,7 +30,7 @@ setup(
     },
     license="MIT",
     packages=find_packages(exclude=["tests*"]),
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     install_requires=[
         "PyMuPDF>=1.24.0",
         "python-docx>=1.1.0",
@@ -78,7 +78,6 @@ setup(
         "Intended Audience :: Education",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
