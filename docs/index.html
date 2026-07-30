@@ -6,7 +6,7 @@
 <title>AEGIS -- Open-Source Academic Integrity &amp; AI Content Checker</title>
 <meta name="description" content="AEGIS: open-source, offline, bias-aware checker for plagiarism, AI content, LLM watermarks, citation hallucinations, ghostwriting, and essay mills. Free forever. Built for research institutions and IT teams.">
 <meta property="og:title" content="AEGIS -- Open-Source Academic Integrity Checker by Sunil Gentyala">
-<meta property="og:description" content="10 detection modules. No cloud. No fees. Catches what Turnitin, GPTZero and CopyLeaks miss.">
+<meta property="og:description" content="10 detection modules. No cloud. No fees. Citation hallucination detection, LLM watermark heuristics, and ESL bias calibration -- open source and free.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://sunilgentyala.github.io/aegis-integrity/">
 <meta name="twitter:card" content="summary_large_image">
@@ -228,12 +228,13 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 
 <!-- HERO -->
 <div class="hero">
-  <div class="hero-badge"><span></span>v2.1.0 &nbsp;|&nbsp; Production Stable &nbsp;|&nbsp; July 2026</div>
+  <div class="hero-badge"><span></span>v2.1.1 &nbsp;|&nbsp; Production Stable &nbsp;|&nbsp; July 2026</div>
   <h1>The Integrity Checker<br>That Sees Everything</h1>
   <p class="hero-sub">
     Open-source. Offline. Bias-aware. 10 detection modules in a single pip install.
     No cloud. No per-submission fees. No bias against international researchers.
-    Built to catch what Turnitin, GPTZero, and CopyLeaks all miss.
+    Adds citation hallucination detection, an LLM watermark heuristic, and ESL-calibrated
+    scoring -- capabilities not publicly documented in mainstream commercial tools.
   </p>
   <div class="hero-buttons">
     <a href="https://github.com/sunilgentyala/aegis-integrity/fork" target="_blank" class="btn btn-green">
@@ -373,7 +374,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
     <div class="det-card" style="--dc:#58a6ff">
       <div class="det-num">Module 01</div>
       <div class="det-name">Citation Hallucination Detection</div>
-      <div class="det-desc">Resolves every DOI via the Crossref REST API. Cross-checks author, year, and title against the live record. Studies show over 50% of AI-generated reference lists are fabricated. No other open-source tool does this.<br><br><b>Verdicts:</b> VALID | MISMATCH | HALLUCINATED | UNRESOLVABLE | NO_DOI</div>
+      <div class="det-desc">Resolves every DOI via the Crossref REST API. Cross-checks author, year, and title against the live record. A peer-reviewed study found ChatGPT fabricated up to 55% of references depending on model version (<a href="https://doi.org/10.1038/s41598-023-41032-5" target="_blank" rel="noopener">Walters &amp; Wilder, Scientific Reports, 2023</a>).<br><br><b>Verdicts:</b> VALID | MISMATCH | HALLUCINATED | UNRESOLVABLE | NO_DOI</div>
     </div>
 
     <div class="det-card" style="--dc:#f78166">
@@ -391,7 +392,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
     <div class="det-card" style="--dc:#3fb950">
       <div class="det-num">Module 04</div>
       <div class="det-name">ESL-Calibrated AI Content Detection</div>
-      <div class="det-desc">Fixes the 61.3% false-positive rate on non-native English writers (Stanford 2023). Per-language threshold multipliers for 15 languages. Paragraph-level scoring. GPT-2 perplexity + burstiness + cross-perplexity ratio + stylometric ensemble.</div>
+      <div class="det-desc">Targets the bias documented by <a href="https://arxiv.org/abs/2304.02819" target="_blank" rel="noopener">Liang et al. (Stanford, 2023)</a>: GPT detectors misclassified more than half of non-native-authored TOEFL essays as AI-generated, one detector flagging up to 98%, while native-English essays were scored accurately. Per-language threshold multipliers for 15 languages. Paragraph-level scoring. GPT-2 perplexity + burstiness + cross-perplexity ratio + stylometric ensemble.</div>
     </div>
 
     <div class="det-card" style="--dc:#ffa657">
@@ -447,8 +448,8 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
       <a href="https://github.com/sunilgentyala/aegis-integrity" target="_blank" class="btn btn-primary">
         &#9733; Star the Repo
       </a>
-      <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.1.0" target="_blank" class="btn btn-outline">
-        &#128229; Download v2.1.0
+      <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.1.1" target="_blank" class="btn btn-outline">
+        &#128229; Download v2.1.1
       </a>
       <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank" class="btn btn-outline">
         &#128172; Open an Issue
@@ -462,7 +463,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 <!-- COMPARISON -->
 <div class="sec-wide" id="comparison">
   <div class="sec-title">Side-by-Side Comparison</div>
-  <p class="sec-sub">AEGIS is the only tool, open-source or commercial, that covers all critical gaps in the 2026 academic integrity threat landscape.</p>
+  <p class="sec-sub">Based on each vendor's public documentation and pricing pages as of July 2026. "Not public" means the capability is not documented publicly by that vendor -- not a confirmed absence. <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank" rel="noopener">Corrections welcome.</a></p>
   <div class="tbl-wrap">
     <table>
       <thead>
@@ -478,21 +479,21 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
       </thead>
       <tbody>
         <tr><td>Open-source / self-hostable</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Citation hallucination detection</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>LLM watermark heuristic (experimental, informational-only)</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Citation network / cartel analysis</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>ESL bias calibration (15 languages)</td><td class="no">No</td><td class="no">No</td><td class="pt">Limited</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Paragraph-level AI scoring</td><td class="no">No</td><td class="no">No</td><td class="ok">Yes</td><td class="ok">Yes</td><td class="pt">Partial</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Semantic paraphrase detection (SBERT)</td><td class="pt">Partial</td><td class="no">No</td><td class="pt">Partial</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Ghostwriting detection (Burrows' Delta)</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Self-plagiarism (open corpus)</td><td class="pt">ScholarOne</td><td class="pt">Paid</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Batch / essay mill detection</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>AI-polish coherence detection</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="pt">Partial</td><td class="ag ok">Yes</td></tr>
-        <tr><td>OpenAlex journal quality check</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Per-sentence explainable reports</td><td class="no">No</td><td class="no">No</td><td class="pt">Partial</td><td class="pt">Partial</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
+        <tr><td>Citation hallucination detection</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>LLM watermark heuristic (experimental, informational-only)</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>Citation network / cartel analysis</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>ESL bias calibration (15 languages)</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>Paragraph-level AI scoring</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ok">Yes</td><td class="ok">Yes</td><td class="pt">Partial</td><td class="ag ok">Yes</td></tr>
+        <tr><td>Semantic paraphrase detection (SBERT)</td><td class="pt">Partial</td><td class="pt">Not public</td><td class="pt">Partial</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>Ghostwriting detection (Burrows' Delta)</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>Self-plagiarism (open corpus)</td><td class="pt">Not public</td><td class="pt">Paid</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>Batch / essay mill detection</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>AI-polish coherence detection</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>OpenAlex journal quality check</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
+        <tr><td>Per-sentence explainable reports</td><td class="pt">Not public</td><td class="pt">Not public</td><td class="pt">Partial</td><td class="pt">Partial</td><td class="pt">Not public</td><td class="ag ok">Yes</td></tr>
         <tr><td>Offline / air-gapped operation</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="no">No</td><td class="ag ok">Yes</td></tr>
         <tr><td>REST API + CLI (free)</td><td class="no">No</td><td class="pt">Paid</td><td class="pt">Paid</td><td class="pt">Paid</td><td class="pt">Paid</td><td class="ag ok">Yes</td></tr>
-        <tr><td>Cost per submission</td><td class="no">$2-5</td><td class="no">$0.08+</td><td class="no">$0.02+</td><td class="no">$0.01+</td><td class="no">$0.01+</td><td class="ag ok">$0.00</td></tr>
+        <tr><td>Pricing model</td><td class="pt">Institutional (not public)</td><td class="pt">Institutional (not public)</td><td class="pt">Paid (self-serve)</td><td class="pt">Paid (self-serve)</td><td class="pt">Paid (self-serve)</td><td class="ag ok">$0.00 (self-hosted)</td></tr>
       </tbody>
     </table>
   </div>
@@ -596,7 +597,7 @@ report = pipeline.analyze(<span class="str">"submission.pdf"</span>)
     <div class="why-card">
       <div class="why-icon">&#127760;</div>
       <div class="why-title">No ESL Bias</div>
-      <div class="why-desc">Stanford 2023 study: 61.3% false positive rate against non-native English writers in all major AI detectors. AEGIS applies per-language calibration across 15 languages.</div>
+      <div class="why-desc"><a href="https://arxiv.org/abs/2304.02819" target="_blank" rel="noopener">Liang et al. (Stanford, 2023)</a> found GPT detectors misclassified more than half of non-native-authored TOEFL essays as AI-generated. AEGIS applies per-language calibration across 15 languages to reduce this bias.</div>
     </div>
     <div class="why-card">
       <div class="why-icon">&#128269;</div>
@@ -616,7 +617,7 @@ report = pipeline.analyze(<span class="str">"submission.pdf"</span>)
     <div class="why-card">
       <div class="why-icon">&#128176;</div>
       <div class="why-title">Free Forever</div>
-      <div class="why-desc">MIT license. No per-submission fees (Turnitin charges $2-5 per paper at scale), no seat licenses, no vendor lock-in. AEGIS costs only the compute time on your own hardware.</div>
+      <div class="why-desc">MIT license. No per-submission fees, no seat licenses, no vendor lock-in -- commercial tools require an institutional license or paid API credits. AEGIS costs only the compute time on your own hardware.</div>
     </div>
   </div>
 </div>
@@ -678,7 +679,7 @@ submission (PDF / DOCX / TEX / TXT)
   <div style="margin-top:.4rem;color:var(--muted);font-size:.83rem">sunil.gentyala@ieee.org</div>
   <div class="footer-links">
     <a href="https://github.com/sunilgentyala/aegis-integrity" target="_blank">GitHub Repo</a>
-    <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.1.0" target="_blank">v2.1.0 Release</a>
+    <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.1.1" target="_blank">v2.1.1 Release</a>
     <a href="https://github.com/sunilgentyala/aegis-integrity/blob/main/README.md" target="_blank">Documentation</a>
     <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank">Report an Issue</a>
     <a href="https://www.linkedin.com/in/sunilgentyala" target="_blank">LinkedIn</a>

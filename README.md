@@ -1,7 +1,7 @@
 # AEGIS Academic Integrity Checker
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.1.1-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/offline-first-orange?style=for-the-badge" alt="Offline">
@@ -11,39 +11,43 @@
 
 > **Open-source, offline, bias-aware academic integrity analysis.**
 > No data sent to third-party services. Runs entirely on your hardware after first model download.
-> The only tool that simultaneously catches plagiarism, AI-generated content, citation hallucinations, ghostwriting, predatory references, and essay mill patterns -- plus an experimental token-distribution heuristic for LLM watermark research.
+> Analyzes plagiarism, AI-generated content, citation hallucinations, ghostwriting, predatory references, and essay mill patterns in a single pipeline -- plus an experimental token-distribution heuristic for LLM watermark research.
 
 ---
 
-## Why AEGIS Beats Every Existing Tool
+## How AEGIS Compares
 
-Every major integrity tool has critical blind spots. AEGIS v2.0 closes **ten** of them simultaneously -- no other open-source or commercial tool comes close:
+Every major integrity tool has blind spots. AEGIS v2.1 aims to close **ten** of them simultaneously.
 
-| Gap | Turnitin | iThenticate | CopyLeaks | GPTZero | Originality.ai | **AEGIS v2.0** |
+Based on each vendor's public documentation and pricing pages as of July 2026. "Not public" means the capability isn't documented publicly by that vendor -- not a confirmed absence. [Corrections welcome](https://github.com/sunilgentyala/aegis-integrity/issues).
+
+| Gap | Turnitin | iThenticate | CopyLeaks | GPTZero | Originality.ai | **AEGIS v2.1** |
 |-----|:--------:|:-----------:|:---------:|:-------:|:--------------:|:--------------:|
 | Open-source / self-hostable | No | No | No | No | No | **Yes** |
-| Citation hallucination detection | No | No | No | No | No | **Yes** |
-| LLM watermark token-distribution heuristic (experimental, keyless) | No | No | No | No | No | **Yes** |
-| Citation network analysis (cartels, predatory) | No | No | No | No | No | **Yes** |
-| ESL / non-native bias calibration (15 languages) | No | No | Limited | No | No | **Yes** |
-| Paragraph-level AI scoring | No | No | Yes | Yes | Partial | **Yes** |
-| Semantic / paraphrase plagiarism (SBERT) | Partial | No | Partial | No | No | **Yes** |
-| Stylometric ghostwriting detection (Burrows' Delta) | No | No | No | No | No | **Yes** |
-| Self-plagiarism against open corpus | ScholarOne only | Paid | No | No | No | **Yes** |
-| Batch classroom / essay mill detection | No | No | No | No | No | **Yes** |
-| Semantic coherence AI-polish detection | No | No | No | No | Partial | **Yes** |
-| OpenAlex journal quality integration | No | No | No | No | No | **Yes** |
-| Fully explainable per-sentence reports | No | No | Partial | Partial | No | **Yes** |
+| Citation hallucination detection | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| LLM watermark token-distribution heuristic (experimental, keyless) | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| Citation network analysis (cartels, predatory) | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| ESL / non-native bias calibration (15 languages) | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| Paragraph-level AI scoring | Not public | Not public | Yes | Yes | Partial | **Yes** |
+| Semantic / paraphrase plagiarism (SBERT) | Partial | Not public | Partial | Not public | Not public | **Yes** |
+| Stylometric ghostwriting detection (Burrows' Delta) | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| Self-plagiarism against open corpus | Not public | Paid | Not public | Not public | Not public | **Yes** |
+| Batch classroom / essay mill detection | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| Semantic coherence AI-polish detection | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| OpenAlex journal quality integration | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| Fully explainable per-sentence reports | Not public | Not public | Partial | Partial | Not public | **Yes** |
 | Offline / air-gapped operation | No | No | No | No | No | **Yes** |
-| REST API + CLI (free) | No | API (paid) | API (paid) | API (paid) | API (paid) | **Yes** |
+| REST API + CLI (free) | No | Paid | Paid | Paid | Paid | **Yes** |
+| Pricing model | Institutional (not public) | Institutional (not public) | Paid (self-serve) | Paid (self-serve) | Paid (self-serve) | **$0.00 (self-hosted)** |
 
 ---
 
 ## Ten Detection Modules
 
-### 1. Citation Hallucination Detection (unique -- no open-source equivalent)
+### 1. Citation Hallucination Detection
 Resolves every DOI via the Crossref REST API and cross-checks author, year, and title.
-Studies show >50% of AI-generated references are fabricated. No production tool verifies this.
+A peer-reviewed study found ChatGPT fabricated up to 55% of references depending on model
+version ([Walters & Wilder, *Scientific Reports*, 2023](https://doi.org/10.1038/s41598-023-41032-5)).
 
 **Verdicts:** `VALID` | `MISMATCH` | `HALLUCINATED` | `UNRESOLVABLE` | `NO_DOI`
 
@@ -75,7 +79,9 @@ misses:
 - **Missing DOI rate** -- very high DOI-absence is consistent with AI-hallucinated bibliographies
 
 ### 4. ESL-Calibrated AI Content Detection
-Fixes the 61.3% false-positive rate on non-native English writers (Stanford 2023 study).
+Targets the bias documented by [Liang et al. (Stanford, 2023)](https://arxiv.org/abs/2304.02819):
+GPT detectors misclassified more than half of non-native-authored TOEFL essays as AI-generated,
+one detector flagging up to 98%, while native-English essays were scored accurately.
 Applies per-language threshold multipliers for 15 languages. Paragraph-level scoring
 pinpoints injected AI sections rather than giving one document-level verdict.
 
@@ -393,15 +399,16 @@ The test suite runs without network calls or ML model downloads.
 manuscript to their servers. AEGIS runs entirely on your machine. For unpublished research,
 clinical data, or confidential submissions, this is the only responsible choice.
 
-**2. Zero false-positive bias against international researchers.** The Stanford 2023 study
-showed 61.3% false-positive rates against ESL writers in all major detectors. AEGIS applies
-per-language calibration across 15 languages, making it safe for international conferences
-and journals.
+**2. Reduced false-positive bias against international researchers.** [Liang et al. (Stanford,
+2023)](https://arxiv.org/abs/2304.02819) found GPT detectors misclassified more than half of
+non-native-authored TOEFL essays as AI-generated. AEGIS applies per-language calibration
+across 15 languages to reduce this bias.
 
-**3. Catches what others can't.** Citation cartels, essay mills, and AI-polished text
-that passes perplexity filters are invisible to every other tool. AEGIS also includes an
-experimental, informational-only LLM watermark heuristic that no other open-source tool
-attempts -- see its [capabilities and limitations](#watermark-detection-capabilities-and-limitations).
+**3. Closes gaps not publicly documented elsewhere.** Citation cartels, essay mills, and
+AI-polished text that passes perplexity filters are not publicly documented as covered by
+mainstream tools. AEGIS also includes an experimental, informational-only LLM watermark
+heuristic not commonly found in open-source alternatives -- see its
+[capabilities and limitations](#watermark-detection-capabilities-and-limitations).
 
 **4. Fully explainable.** No black-box scores. Every flag cites the exact sentence, the
 source it was matched against, and the metric that triggered it. Defensible in an
@@ -412,7 +419,8 @@ air-gapped deployment, batch mode for classroom scanning, persistent indices for
 journal editorial systems.
 
 **6. Free, forever.** MIT license. No per-submission fees, no seat licenses, no vendor
-lock-in. Turnitin costs $2-5 per submission at scale. AEGIS costs compute time only.
+lock-in -- commercial tools require an institutional license or paid API credits. AEGIS
+costs compute time only.
 
 ---
 
@@ -420,7 +428,8 @@ lock-in. Turnitin costs $2-5 per submission at scale. AEGIS costs compute time o
 
 - Kirchenbauer et al. (2023). *A Watermark for Large Language Models.* ICML 2023.
 - Zhao et al. (2023). *Provable Robust Watermarking for AI-Generated Text.* ICLR 2024.
-- Liang et al. (2023). *GPT Detectors Are Biased Against Non-Native English Writers.* Science 2023.
+- Liang et al. (2023). *GPT Detectors Are Biased Against Non-Native English Writers.* Patterns 4(7), 2023. [arXiv:2304.02819](https://arxiv.org/abs/2304.02819).
+- Walters & Wilder (2023). *Fabrication and Errors in the Bibliographic Citations Generated by ChatGPT.* Scientific Reports 13, 14045. [doi:10.1038/s41598-023-41032-5](https://doi.org/10.1038/s41598-023-41032-5).
 - Burrows (1987). *Word Patterns and Story Shapes.* Literary Linguistic Computing 2(2).
 - McCarthy & Jarvis (2010). *MTLD, vocd-D, and HD-D.* Behavior Research Methods 42(2).
 - COPE (2019). *Text Recycling Guidelines.* Committee on Publication Ethics.
@@ -452,6 +461,17 @@ Website: [sunilgentyala.github.io/aegis-integrity](https://sunilgentyala.github.
 ---
 
 ## Changelog
+
+### v2.1.1 (July 2026)
+- **FIX:** Replaced unsourced comparison-table claims and stats on the README and GitHub Pages
+  site with cited sources (Liang et al. 2023 for ESL false-positive bias; Walters & Wilder 2023
+  for citation fabrication rates) and hedged "Not public" language for competitor capabilities
+  that aren't independently verifiable
+- **FIX:** Removed invented per-submission dollar figures for competitor pricing (no public
+  source existed for several of them); replaced with pricing-model descriptions
+- **FIX:** Corrected Liang et al. (2023) citation -- published in *Patterns* (Cell Press), not
+  *Science*
+- **FIX:** Stale "AEGIS v2.0" heading/table references updated to v2.1
 
 ### v2.1.0 (July 2026)
 - **FIX:** Watermark heuristic could unconditionally force `overall_risk` to `CRITICAL`; it now
