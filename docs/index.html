@@ -6,12 +6,12 @@
 <title>AEGIS -- Open-Source Academic Integrity &amp; AI Content Checker</title>
 <meta name="description" content="AEGIS: open-source, offline, bias-aware checker for plagiarism, AI content, LLM watermarks, citation hallucinations, ghostwriting, and essay mills. Free forever. Built for research institutions and IT teams.">
 <meta property="og:title" content="AEGIS -- Open-Source Academic Integrity Checker by Sunil Gentyala">
-<meta property="og:description" content="10 detection modules. No cloud. No fees. Citation hallucination detection, LLM watermark heuristics, and ESL bias calibration -- open source and free.">
+<meta property="og:description" content="11 detection modules. No cloud. No fees. Citation hallucination detection, LLM watermark heuristics, and ESL bias calibration -- open source and free.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://sunilgentyala.github.io/aegis-integrity/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="AEGIS -- Open-Source Academic Integrity Checker">
-<meta name="twitter:description" content="10 detectors. LLM watermarks. Citation hallucinations. Essay mills. Free and offline.">
+<meta name="twitter:description" content="11 detectors. LLM watermarks. Citation hallucinations. Essay mills. Free and offline.">
 <!-- Favicon -->
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="shortcut icon" href="favicon.svg">
@@ -228,10 +228,10 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 
 <!-- HERO -->
 <div class="hero">
-  <div class="hero-badge"><span></span>v2.3.0 &nbsp;|&nbsp; Beta &mdash; Human Review Required &nbsp;|&nbsp; July 2026</div>
+  <div class="hero-badge"><span></span>v2.4.0 &nbsp;|&nbsp; Beta &mdash; Human Review Required &nbsp;|&nbsp; August 2026</div>
   <h1>The Integrity Checker<br>That Sees Everything</h1>
   <p class="hero-sub">
-    Open-source. Offline. Bias-aware. 10 detection modules in a single pip install.
+    Open-source. Offline. Bias-aware. 11 detection modules in a single pip install.
     No cloud. No per-submission fees. No bias against international researchers.
     Adds citation hallucination detection, an LLM watermark heuristic, and ESL-calibrated
     scoring -- capabilities not publicly documented in mainstream commercial tools.
@@ -251,7 +251,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
     <span class="badge b-blue">Python 3.10+</span>
     <span class="badge b-green">MIT License</span>
     <span class="badge b-orange">Offline First</span>
-    <span class="badge b-purple">10 Detectors</span>
+    <span class="badge b-purple">11 Detectors</span>
     <span class="badge b-blue">ESL Calibrated (15 langs)</span>
     <span class="badge b-green">REST API + CLI</span>
     <span class="badge b-orange">Docker Ready</span>
@@ -263,7 +263,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 <!-- STATS -->
 <div style="max-width:1200px;margin:0 auto;padding:0 2rem">
   <div class="stats">
-    <div class="stat"><div class="stat-num">10</div><div class="stat-label">Detection Modules</div></div>
+    <div class="stat"><div class="stat-num">11</div><div class="stat-label">Detection Modules</div></div>
     <div class="stat"><div class="stat-num">15</div><div class="stat-label">ESL Languages Calibrated</div></div>
     <div class="stat"><div class="stat-num">200</div><div class="stat-label">Min. Tokens for Watermark Heuristic</div></div>
     <div class="stat"><div class="stat-num">5</div><div class="stat-label">Citation Verdict Classes</div></div>
@@ -367,7 +367,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 
 <!-- DETECTORS -->
 <div class="sec" id="detectors">
-  <div class="sec-title">Ten Detection Modules, One Pipeline</div>
+  <div class="sec-title">Eleven Detection Modules, One Pipeline</div>
   <p class="sec-sub">Each module runs independently and contributes to a unified risk score. Disable any module via PipelineConfig.</p>
   <div class="det-grid">
 
@@ -431,6 +431,12 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
       <div class="det-desc">Cross-document essay mill detection. Pairwise MinHash similarity matrix + rare vocabulary overlap + section sequence fingerprinting. Union-Find clustering groups submissions by suspected shared AI source. Scales to hundreds of documents.</div>
     </div>
 
+    <div class="det-card" style="--dc:#58a6ff">
+      <div class="det-num">Module 11</div>
+      <div class="det-name">Venue &amp; Duplicate-Submission Verification <span class="new-tag">NEW v2.4</span></div>
+      <div class="det-desc">Flags a reference that reads as an IEEE/ACM/Elsevier/IET/IETE/BCS publication whose DOI actually resolves to a different publisher (venue misattribution or fabrication), reusing citations already resolved by Module 01 at no extra network cost. Also searches each target publisher for near-identical titles already indexed under that venue via Crossref member IDs and DOI-prefix matching, to catch accidental or attempted duplicate submissions. Restrict to a subset with <code>--target-publishers</code>.</div>
+    </div>
+
   </div>
 </div>
 
@@ -448,8 +454,8 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
       <a href="https://github.com/sunilgentyala/aegis-integrity" target="_blank" class="btn btn-primary">
         &#9733; Star the Repo
       </a>
-      <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.3.0" target="_blank" class="btn btn-outline">
-        &#128229; Download v2.3.0
+      <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.4.0" target="_blank" class="btn btn-outline">
+        &#128229; Download v2.4.0
       </a>
       <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank" class="btn btn-outline">
         &#128172; Open an Issue
@@ -474,7 +480,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
           <th>CopyLeaks</th>
           <th>GPTZero</th>
           <th>Originality.ai</th>
-          <th class="ag">AEGIS v2.1</th>
+          <th class="ag">AEGIS v2.4</th>
         </tr>
       </thead>
       <tbody>
@@ -504,7 +510,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 <!-- INSTALL -->
 <div class="sec" id="install">
   <div class="sec-title">Install in 3 Steps</div>
-  <p class="sec-sub">All 10 detectors active after a single pip install. Minimal install (no PyTorch, no SBERT) also available.</p>
+  <p class="sec-sub">All 11 detectors active after a single pip install. Minimal install (no PyTorch, no SBERT) also available.</p>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start" class="install-grid">
     <div class="install-steps">
@@ -627,7 +633,7 @@ report = pipeline.analyze(<span class="str">"submission.pdf"</span>)
 <!-- ARCH -->
 <div class="sec">
   <div class="sec-title">Architecture</div>
-  <p class="sec-sub">Ten detectors run independently. Each result contributes to a unified risk score and per-sentence explainable HTML report.</p>
+  <p class="sec-sub">Eleven detectors run independently. Each result contributes to a unified risk score and per-sentence explainable HTML report.</p>
   <div class="arch">
 <pre>
 submission (PDF / DOCX / TEX / TXT)
@@ -636,7 +642,7 @@ submission (PDF / DOCX / TEX / TXT)
   DocumentParser              -- PyMuPDF / python-docx / TexSoup / striprtf
        |
   ┌────┴────────────────────────────────────────────────────────────────────┐
-  │                        AEGISPipeline v2.1                               │
+  │                        AEGISPipeline v2.4                               │
   │                                                                         │
   │  NGramDetector             word 3-gram + char 5-gram MinHash LSH        │
   │  SemanticDetector          SBERT + FAISS + CrossEncoder reranker        │
@@ -648,6 +654,7 @@ submission (PDF / DOCX / TEX / TXT)
   │  CitationNetworkAnalyzer   [v2.0] self-cite; predatory; OpenAlex        │
   │  SemanticCoherenceAnalyzer [v2.0] connectors; uniformity; MTLD          │
   │  BatchAnalyzer             [v2.0] pairwise matrix; essay mill clusters  │
+  │  VenueVerificationDetector [v2.4] IEEE/ACM/Elsevier/IET/IETE/BCS check  │
   └────────────────────────────┬────────────────────────────────────────────┘
                                |
                          AnalysisReport
@@ -679,7 +686,7 @@ submission (PDF / DOCX / TEX / TXT)
   <div style="margin-top:.4rem;color:var(--muted);font-size:.83rem">sunil.gentyala@ieee.org</div>
   <div class="footer-links">
     <a href="https://github.com/sunilgentyala/aegis-integrity" target="_blank">GitHub Repo</a>
-    <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.3.0" target="_blank">v2.3.0 Release</a>
+    <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.4.0" target="_blank">v2.4.0 Release</a>
     <a href="https://github.com/sunilgentyala/aegis-integrity/blob/main/README.md" target="_blank">Documentation</a>
     <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank">Report an Issue</a>
     <a href="https://www.linkedin.com/in/sunilgentyala" target="_blank">LinkedIn</a>
@@ -687,7 +694,7 @@ submission (PDF / DOCX / TEX / TXT)
     <a href="https://github.com/sunilgentyala/aegis-integrity/blob/main/LICENSE" target="_blank">MIT License</a>
   </div>
   <div style="margin-top:1.25rem;font-size:.76rem;color:#484f58">
-    AEGIS v2.1 &nbsp;|&nbsp; Academic Integrity Engine with Generative-AI Scrutiny &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; 2026
+    AEGIS v2.4 &nbsp;|&nbsp; Academic Integrity Engine with Generative-AI Scrutiny &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; 2026
   </div>
 </footer>
 
