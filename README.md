@@ -1,7 +1,7 @@
 # AEGIS Academic Integrity Checker
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.3.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.4.0-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/offline-first-orange?style=for-the-badge" alt="Offline">
@@ -18,14 +18,15 @@
 
 ## How AEGIS Compares
 
-Every major integrity tool has blind spots. AEGIS v2.1 aims to close **ten** of them simultaneously.
+Every major integrity tool has blind spots. AEGIS v2.4 aims to close **eleven** of them simultaneously.
 
-Based on each vendor's public documentation and pricing pages as of July 2026. "Not public" means the capability isn't documented publicly by that vendor -- not a confirmed absence. [Corrections welcome](https://github.com/sunilgentyala/aegis-integrity/issues).
+Based on each vendor's public documentation and pricing pages as of August 2026. "Not public" means the capability isn't documented publicly by that vendor -- not a confirmed absence. [Corrections welcome](https://github.com/sunilgentyala/aegis-integrity/issues).
 
-| Gap | Turnitin | iThenticate | CopyLeaks | GPTZero | Originality.ai | **AEGIS v2.1** |
+| Gap | Turnitin | iThenticate | CopyLeaks | GPTZero | Originality.ai | **AEGIS v2.4** |
 |-----|:--------:|:-----------:|:---------:|:-------:|:--------------:|:--------------:|
 | Open-source / self-hostable | No | No | No | No | No | **Yes** |
 | Citation hallucination detection | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| IEEE/ACM/Elsevier/IET/IETE/BCS -scoped venue-claim + duplicate-title check | Yes (full-text, paid Similarity Check membership) | Yes (full-text, paid Similarity Check membership) | Not public | Not public | Not public | **Yes (metadata-only via Crossref, free)** |
 | LLM watermark token-distribution heuristic (experimental, keyless) | Not public | Not public | Not public | Not public | Not public | **Yes** |
 | Citation network analysis (cartels, predatory) | Not public | Not public | Not public | Not public | Not public | **Yes** |
 | ESL / non-native bias calibration (15 languages) | Not public | Not public | Not public | Not public | Not public | **Yes** |
@@ -43,7 +44,7 @@ Based on each vendor's public documentation and pricing pages as of July 2026. "
 
 ---
 
-## Ten Detection Modules
+## Eleven Detection Modules
 
 ### 1. Citation Hallucination Detection
 Resolves every DOI via the Crossref REST API and cross-checks author, year, and title.
@@ -125,6 +126,27 @@ submissions simultaneously:
 - AI score clustering (statistically unlikely for a class to all independently write AI-like prose)
 - Union-Find clustering to group submissions by suspected common source
 
+### 11. Target-Publisher Verification (v2.4 -- novel)
+Scopes citation and duplicate-submission checking to six publishers authors most
+commonly ask about: **IEEE, ACM, Elsevier, IET, IETE, BCS**. No outside tool (this
+one included) can query those publishers' actual full-text plagiarism databases --
+Crossref's Similarity Check corpus that backs Turnitin/iThenticate is restricted to
+paying member organizations, and Scopus/IEEE Xplore's public APIs are metadata- or
+abstract-only even with a key. What this module does instead, entirely via free
+Crossref metadata:
+- **Venue-claim verification** -- flags a reference that reads as "IEEE Trans. ..."
+  or "Proc. ACM ..." whose DOI actually resolves to a different publisher (venue
+  misattribution or fabrication), reusing citations already resolved by module 1 --
+  no extra network calls.
+- **Duplicate-submission search** -- searches each target publisher (via Crossref
+  member id for IEEE/ACM/Elsevier/IET; via DOI-prefix + container-title matching
+  for IETE and BCS, which publish through Informa/Taylor & Francis and Oxford
+  University Press respectively rather than holding their own Crossref membership)
+  for near-identical titles already indexed under that venue.
+
+Configurable via `--target-publishers IEEE,ACM,...` (CLI) or
+`PipelineConfig.venue_target_publishers` (Python API); defaults to all six.
+
 ---
 
 ## Architecture
@@ -148,6 +170,7 @@ submission (PDF / DOCX / TEX / TXT)
   │  CitationNetworkAnalyzer[v2] self-cite inflation; OpenAlex        │
   │  SemanticCoherenceAnalyzer[v2] discourse connectors; uniformity   │
   │  BatchAnalyzer         [v2] classroom-level essay mill detection  │
+  │  TargetPublisherVerifier[v2.4] IEEE/ACM/Elsevier/IET/IETE/BCS     │
   └────────────────────────────┬──────────────────────────────────────┘
                                |
                           AnalysisReport
@@ -166,7 +189,7 @@ submission (PDF / DOCX / TEX / TXT)
 pip install -e .
 ```
 
-**Full (all 10 detectors):**
+**Full (all 11 detectors):**
 ```bash
 pip install -e ".[ml,nlp,bib]"
 python -m spacy download en_core_web_sm
@@ -501,6 +524,19 @@ Website: [sunilgentyala.github.io/aegis-integrity](https://sunilgentyala.github.
 ---
 
 ## Changelog
+
+### v2.4.0 (August 2026)
+- **NEW:** Target-Publisher Verification module (detector #11), scoping
+  citation and duplicate-submission checks to IEEE, ACM, Elsevier, IET,
+  IETE, and BCS. Adds `venue_verification` to every report: per-venue
+  verified-citation counts, `VENUE_MISMATCH` flags when a reference claims
+  one of these six venues but its DOI resolves elsewhere, and a
+  duplicate/prior-publication search scoped per venue via Crossref
+  (member id for IEEE/ACM/Elsevier/IET; DOI-prefix + container-title
+  match for IETE/BCS, which don't hold independent Crossref membership).
+  Configurable via `--target-publishers` (CLI) / `venue_target_publishers`
+  (Python API); enabled by default, adds no new required dependency (reuses
+  the existing `requests` + Crossref integration).
 
 ### v2.3.0 (July 2026)
 Follow-up audit fixes from testing against real manuscripts, plus CI/security

@@ -12,6 +12,8 @@ Execution order:
   8. LLM watermark detection (Kirchenbauer z-test; soft watermark entropy)
   9. Citation network analysis (self-citation inflation; predatory journals)
  10. Semantic coherence analysis (discourse connectors; sentence uniformity)
+ 11. Target-publisher verification (IEEE/ACM/Elsevier/IET/IETE/BCS-scoped
+     citation-claim checks and duplicate-submission search via Crossref)
 
 Each detector runs independently; results are merged into AnalysisReport.
 """
@@ -34,6 +36,8 @@ from aegis.detectors.watermark_detector import (
     LLMWatermarkDetector, WatermarkResult, WatermarkMode)
 from aegis.detectors.citation_network import CitationNetworkAnalyzer, CitationNetworkResult
 from aegis.detectors.coherence_analyzer import SemanticCoherenceAnalyzer, CoherenceResult
+from aegis.detectors.venue_verification import TargetPublisherVerifier, VenueVerificationResult
+from aegis.detectors.publisher_registry import DEFAULT_TARGET_PUBLISHERS
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +98,11 @@ class PipelineConfig:
     coherence_cv_threshold: float = 0.35
     coherence_hedge_threshold: float = 2.5
 
+    # Target-publisher verification (v2.4)
+    venue_target_publishers: tuple[str, ...] = DEFAULT_TARGET_PUBLISHERS
+    venue_title_similarity_threshold: float = 0.75
+    venue_offline: bool = False
+
     # Runtime
     device: str = "cpu"
     run_ai_detector: bool = True
@@ -104,6 +113,7 @@ class PipelineConfig:
     run_watermark_detector: bool = True
     run_citation_network: bool = True
     run_coherence_analyzer: bool = True
+    run_venue_verification: bool = True
 
 
 @dataclass
@@ -128,6 +138,7 @@ class AnalysisReport:
     watermark_result: Optional[WatermarkResult] = None
     citation_network_result: Optional[CitationNetworkResult] = None
     coherence_result: Optional[CoherenceResult] = None
+    venue_verification_result: Optional[VenueVerificationResult] = None
 
     # Aggregate risk scores (0.0 - 1.0)
     plagiarism_score: float = 0.0    # combined n-gram + semantic
@@ -230,6 +241,13 @@ class AEGISPipeline:
             cv_threshold=self.cfg.coherence_cv_threshold,
             hedge_threshold=self.cfg.coherence_hedge_threshold,
         ) if self.cfg.run_coherence_analyzer else None
+
+        self._venue_verifier = TargetPublisherVerifier(
+            target_publishers=list(self.cfg.venue_target_publishers),
+            email=self.cfg.citation_email,
+            title_similarity_threshold=self.cfg.venue_title_similarity_threshold,
+            offline=self.cfg.venue_offline,
+        ) if self.cfg.run_venue_verification else None
 
         self._corpus_loaded = False
 
@@ -438,7 +456,20 @@ class AEGISPipeline:
                 logger.warning("Coherence analysis failed: %s", exc)
                 _status("coherence", "failed", str(exc))
 
-        # 11. Overall risk and flags
+        # 11. Target-publisher verification (IEEE/ACM/Elsevier/IET/IETE/BCS)
+        if not self._venue_verifier:
+            _status("venue_verification", "disabled")
+        else:
+            logger.info("Running target-publisher verification...")
+            try:
+                report.venue_verification_result = self._venue_verifier.analyze(
+                    parsed.title, report.citation_verdicts)
+                _status("venue_verification", "completed")
+            except Exception as exc:
+                logger.warning("Target-publisher verification failed: %s", exc)
+                _status("venue_verification", "failed", str(exc))
+
+        # 12. Overall risk and flags
         report.overall_risk, report.flags = self._assess_overall_risk(report)
         report.elapsed_seconds = round(time.time() - t0, 2)
 
@@ -452,6 +483,10 @@ class AEGISPipeline:
         if (report.citation_network_result
                 and report.citation_network_result.openalex_queried):
             contacted.append("OpenAlex")
+        if (report.venue_verification_result
+                and report.venue_verification_result.queried
+                and "Crossref" not in contacted):
+            contacted.append("Crossref")
         report.network_activity = {
             "document_content_transmitted": False,
             "citation_check_mode": (
@@ -553,6 +588,11 @@ class AEGISPipeline:
                 if net_flag.severity in ("HIGH", "MEDIUM"):
                     flags.append(f"[Citation Network] {net_flag.message}")
 
+        if report.venue_verification_result:
+            for v_flag in report.venue_verification_result.flags:
+                if v_flag.severity in ("HIGH", "MEDIUM"):
+                    flags.append(f"[{v_flag.flag_type}] {v_flag.message}")
+
         if report.coherence_result and report.coherence_result.verdict in (
             "AI_POLISHED", "AI_GENERATED"
         ):
@@ -597,6 +637,12 @@ class AEGISPipeline:
         network_risk = (report.citation_network_result.overall_risk
                         if report.citation_network_result else "LOW")
 
+        # Like citation_network_result, venue_verification never forces
+        # CRITICAL on its own -- a single venue-claim mismatch or duplicate-
+        # title hit is a lead for human review, not proof of misconduct.
+        venue_risk = (report.venue_verification_result.overall_risk
+                      if report.venue_verification_result else "LOW")
+
         if (report.plagiarism_score > 0.70 or
                 hallucinated_count > 0 or
                 sp_risk == "CRITICAL"):
@@ -606,6 +652,7 @@ class AEGISPipeline:
               sp_risk == "HIGH" or
               citation_score_for_risk > 0.30 or
               network_risk == "HIGH" or
+              venue_risk == "HIGH" or
               report.coherence_score > 0.75):
             risk = "HIGH"
         elif (report.plagiarism_score > 0.20 or
@@ -614,6 +661,7 @@ class AEGISPipeline:
               citation_score_for_risk > 0.10 or
               report.style_score > 0.30 or
               network_risk == "MEDIUM" or
+              venue_risk == "MEDIUM" or
               report.coherence_score > 0.50):
             risk = "MEDIUM"
         else:

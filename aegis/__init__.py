@@ -12,10 +12,12 @@ in existing plagiarism detection tools:
   6. LaTeX source file direct parsing (no PDF conversion artefacts)
   7. Full offline operation -- no commercial API dependency
   8. Structured JSON + HTML explainable reports (not black-box percentages)
+  9. Target-publisher verification -- venue-claim and duplicate-submission
+     checks scoped to IEEE, ACM, Elsevier, IET, IETE, and BCS via Crossref
 
 Authors: Sunil Gentyala, Rakesh Prakash, Akhila Kasturi
 License: MIT
 """
 
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 __author__ = "Sunil Gentyala"

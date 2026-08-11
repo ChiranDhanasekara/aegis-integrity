@@ -265,6 +265,36 @@ class ReportGenerator:
                 ],
             }
 
+        # Target-publisher verification (IEEE/ACM/Elsevier/IET/IETE/BCS)
+        if r.venue_verification_result:
+            vv = r.venue_verification_result
+            d["venue_verification"] = {
+                "target_publishers": vv.target_publishers,
+                "citations_by_publisher": vv.citations_by_publisher,
+                "overall_risk": vv.overall_risk,
+                "queried": vv.queried,
+                "prior_publication_matches": [
+                    {
+                        "publisher": m.publisher,
+                        "title": m.title,
+                        "doi": m.doi,
+                        "year": m.year,
+                        "similarity": m.title_similarity,
+                        "url": m.url,
+                    }
+                    for m in vv.prior_publication_matches
+                ],
+                "flags": [
+                    {
+                        "type": f.flag_type,
+                        "severity": f.severity,
+                        "message": f.message,
+                        "cite_key": f.cite_key,
+                    }
+                    for f in vv.flags
+                ],
+            }
+
         return d
 
     # ------------------------------------------------------------------
@@ -314,6 +344,7 @@ class ReportGenerator:
         watermark_section = self._watermark_section(data.get("watermark"))
         citation_network_section = self._citation_network_section(data.get("citation_network"))
         coherence_section = self._coherence_section(data.get("coherence"))
+        venue_verification_section = self._venue_verification_section(data.get("venue_verification"))
 
         scores = data["scores"]
 
@@ -417,6 +448,10 @@ class ReportGenerator:
   <!-- Citation network -->
   <h2>Citation Network Analysis (Self-Citation, Predatory Venues, Clustering)</h2>
   <div class="section">{citation_network_section}</div>
+
+  <!-- Target-publisher verification -->
+  <h2>Target-Publisher Verification (IEEE / ACM / Elsevier / IET / IETE / BCS)</h2>
+  <div class="section">{venue_verification_section}</div>
 
   <!-- Stylometric -->
   <h2>Stylometric Analysis (Authorship Consistency)</h2>
@@ -752,6 +787,46 @@ class ReportGenerator:
             f"<p>Year span: {year_span[0]}&ndash;{year_span[1]} &nbsp;|&nbsp; "
             f"Venue concentration (Herfindahl): {cn['venue_concentration']:.3f} &nbsp;|&nbsp; "
             f"OpenAlex queried: {'Yes' if cn.get('openalex_queried') else 'No'}</p>"
+            f"{flags_html}"
+        )
+
+    def _venue_verification_section(self, vv: Optional[dict]) -> str:
+        if not vv:
+            return "<p class='no-data'>Target-publisher verification was skipped or unavailable.</p>"
+        risk_color = self.RISK_COLORS.get(vv["overall_risk"], "#95a5a6")
+        badge = (f'<span class="verdict" style="background:{risk_color}">'
+                 f'{vv["overall_risk"]}</span>')
+        counts = vv.get("citations_by_publisher", {})
+        counts_str = " &nbsp;|&nbsp; ".join(
+            f"{pub}: {n}" for pub, n in counts.items()
+        ) or "none"
+        matches = vv.get("prior_publication_matches", [])
+        matches_html = (
+            "<table><thead><tr><th>Publisher</th><th>Title</th>"
+            "<th>Year</th><th>Similarity</th><th>DOI</th></tr></thead><tbody>"
+            + "".join(
+                f"<tr><td>{self._esc(m['publisher'])}</td>"
+                f"<td>{self._esc(m['title'][:100])}</td>"
+                f"<td>{self._esc(m.get('year') or '')}</td>"
+                f"<td>{m['similarity']:.0%}</td>"
+                f"<td>{self._esc(m.get('doi') or '')}</td></tr>"
+                for m in matches
+            ) + "</tbody></table>"
+        ) if matches else "<p>No near-duplicate titles found under the target publishers.</p>"
+        flags_html = (
+            "<ul>" + "".join(
+                f"<li><strong>{self._esc(f['type'])}</strong> "
+                f"({self._esc(f['severity'])}): {self._esc(f['message'])}</li>"
+                for f in vv.get("flags", [])
+            ) + "</ul>"
+        ) if vv.get("flags") else "<p>No target-publisher flags.</p>"
+        return (
+            f"<p>Overall risk: {badge} &nbsp; "
+            f"Target publishers checked: {', '.join(vv.get('target_publishers', []))} "
+            f"&nbsp;|&nbsp; Crossref queried: {'Yes' if vv.get('queried') else 'No'}</p>"
+            f"<p>Verified citations by publisher: {counts_str}</p>"
+            f"<p><strong>Duplicate / prior-publication search:</strong></p>"
+            f"{matches_html}"
             f"{flags_html}"
         )
 

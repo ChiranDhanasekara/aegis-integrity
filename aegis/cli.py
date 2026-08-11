@@ -83,6 +83,11 @@ def cli():
 @click.option("--no-semantic", is_flag=True, help="Skip SBERT semantic search.")
 @click.option("--no-stylometric", is_flag=True, help="Skip stylometric analysis.")
 @click.option("--no-self-plagiarism", is_flag=True, help="Skip self-plagiarism check.")
+@click.option("--no-venue-check", is_flag=True,
+              help="Skip target-publisher verification (IEEE/ACM/Elsevier/IET/IETE/BCS).")
+@click.option("--target-publishers", default=None,
+              help="Comma-separated subset of IEEE,ACM,Elsevier,IET,IETE,BCS to check "
+                   "(default: all six).")
 @click.option("--watermark-mode",
               type=click.Choice(["disabled", "experimental", "verified_scheme"]),
               default="experimental", show_default=True,
@@ -96,13 +101,20 @@ def cli():
 def analyze(
     submission, corpus, prior_works, index_dir,
     output, output_html, no_ai, no_citations, no_semantic,
-    no_stylometric, no_self_plagiarism, watermark_mode, device, email,
+    no_stylometric, no_self_plagiarism, no_venue_check, target_publishers,
+    watermark_mode, device, email,
 ):
     """Run the full AEGIS analysis on SUBMISSION (PDF, DOCX, TEX, or TXT)."""
     from aegis.core.pipeline import AEGISPipeline, PipelineConfig
     from aegis.corpus.indexer import CorpusIndexer
     from aegis.detectors.watermark_detector import WatermarkMode
+    from aegis.detectors.publisher_registry import DEFAULT_TARGET_PUBLISHERS
     from aegis.report.generator import ReportGenerator
+
+    venue_targets = (
+        tuple(p.strip() for p in target_publishers.split(",") if p.strip())
+        if target_publishers else DEFAULT_TARGET_PUBLISHERS
+    )
 
     cfg = PipelineConfig(
         device=device,
@@ -112,6 +124,8 @@ def analyze(
         run_semantic=not no_semantic,
         run_stylometric=not no_stylometric,
         run_self_plagiarism=not no_self_plagiarism,
+        run_venue_verification=not no_venue_check,
+        venue_target_publishers=venue_targets,
         watermark_mode=WatermarkMode(watermark_mode),
     )
     pipeline = AEGISPipeline(config=cfg)
@@ -161,6 +175,14 @@ def analyze(
         console.print(
             f"Watermark analysis: [cyan]{wr.mode.value}[/] -> {wr.verdict}{badge} "
             f"(affects overall risk: {wr.affects_overall_risk})"
+        )
+
+    if report.venue_verification_result:
+        vv = report.venue_verification_result
+        console.print(
+            f"Target-publisher verification ({', '.join(vv.target_publishers)}): "
+            f"{vv.overall_risk} -- "
+            f"{len(vv.prior_publication_matches)} possible duplicate(s) found"
         )
 
     if report.flags:
