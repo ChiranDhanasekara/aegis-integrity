@@ -84,7 +84,7 @@ def aegis_analyze_paper(
     skip_citations: bool = False,
     html_report: bool = True,
 ) -> str:
-    """Analyze an academic paper (PDF/DOCX/TEX/TXT) with AEGIS v2.4.
+    """Analyze an academic paper (PDF/DOCX/TEX/TXT) with AEGIS v2.5.
 
     Runs all 11 detection modules: n-gram and semantic plagiarism, ESL-calibrated
     AI content detection, Crossref citation hallucination verification, LLM watermark

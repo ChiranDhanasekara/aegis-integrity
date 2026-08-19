@@ -18,11 +18,11 @@
 
 ## How AEGIS Compares
 
-Every major integrity tool has blind spots. AEGIS v2.4 aims to close **eleven** of them simultaneously.
+Every major integrity tool has blind spots. AEGIS v2.5 aims to close **eleven** of them simultaneously.
 
 Based on each vendor's public documentation and pricing pages as of August 2026. "Not public" means the capability isn't documented publicly by that vendor -- not a confirmed absence. [Corrections welcome](https://github.com/sunilgentyala/aegis-integrity/issues).
 
-| Gap | Turnitin | iThenticate | CopyLeaks | GPTZero | Originality.ai | **AEGIS v2.4** |
+| Gap | Turnitin | iThenticate | CopyLeaks | GPTZero | Originality.ai | **AEGIS v2.5** |
 |-----|:--------:|:-----------:|:---------:|:-------:|:--------------:|:--------------:|
 | Open-source / self-hostable | No | No | No | No | No | **Yes** |
 | Citation hallucination detection | Not public | Not public | Not public | Not public | Not public | **Yes** |
@@ -87,7 +87,10 @@ one detector flagging up to 98%, while native-English essays were scored accurat
 Applies per-language threshold multipliers for 15 languages. Paragraph-level scoring
 pinpoints injected AI sections rather than giving one document-level verdict.
 
-Signals: GPT-2 perplexity, burstiness, cross-perplexity ratio, stylometric ensemble.
+Signals: GPT-2 perplexity, burstiness, cross-perplexity ratio, stylometric ensemble,
+GPT-4/GPT-5-era lexical-tell density (v2.5 -- transition/elevation vocabulary
+disproportionately common in ChatGPT/GPT-4/GPT-5-family output, which GPT-2
+perplexity alone under-detects against fluent frontier-model text).
 
 ### 5. Semantic Coherence Analysis (v2.0 -- novel)
 Detects AI-polished text that passes perplexity filters because it was post-processed
@@ -158,11 +161,11 @@ submission (PDF / DOCX / TEX / TXT)
   DocumentParser              -- PyMuPDF / python-docx / TexSoup / striprtf
        |
   ┌────┴──────────────────────────────────────────────────────────────┐
-  │  AEGISPipeline v2.1                                               │
+  │  AEGISPipeline v2.5                                               │
   │                                                                   │
   │  NGramDetector             word 3-gram + char 5-gram MinHash LSH  │
   │  SemanticDetector          SBERT + FAISS + CrossEncoder reranker  │
-  │  AIContentDetector         GPT-2 perplexity + burstiness + ESL    │
+  │  AIContentDetector[v2.5]   GPT-2 perplexity+burstiness+ESL+tell   │
   │  CitationIntegrityDetector Crossref REST API (DOI resolution)     │
   │  StylometricAnalyzer       Burrows' Delta; 60-dim feature vector  │
   │  SelfPlagiarismDetector    SBERT + n-gram vs. prior works         │
