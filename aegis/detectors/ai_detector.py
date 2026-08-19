@@ -18,8 +18,26 @@ Methods:
   - Cross-perplexity ratio: P(GPT-2-base) / P(GPT-2-medium) -- Binoculars
     inspiration; GPT-2 base is the "observer", medium is the "scorer"
   - Stylometric feature ensemble: sentence length std, vocabulary richness,
-    hedge phrase density, passive voice ratio, nominalization density
+    hedge phrase density, passive voice ratio, nominalization density,
+    GPT-4/GPT-5-era lexical-tell density (see GPT_TELL_PHRASES below)
   - Language detection for ESL threshold calibration
+
+Why a lexical-tell signal, separate from perplexity:
+  GPT-2 perplexity was a reasonable proxy for "how predictable is this text
+  to a language model" when GPT-2-era output was itself high-perplexity and
+  distinguishable from human writing. Frontier chat models (GPT-4o,
+  GPT-5-class, and comparably-tuned models) are RLHF-tuned toward fluent,
+  low-perplexity, high-burstiness prose that reads much closer to human
+  academic writing than GPT-2 output ever did -- perplexity/burstiness
+  alone under-detect this generation of models. Independent of perplexity,
+  these models share a documented, disproportionately-used vocabulary of
+  transition/hedging/elevation phrases ("delve into", "underscores",
+  "pivotal role", "leverage", "in conclusion", ...), catalogued by
+  Originality.ai's and Pangram Labs' 2024 analyses of ChatGPT/GPT-4-family
+  output relative to human corpora. A hit on this lexicon is a stylistic
+  tell, not proof of AI authorship -- these are also ordinary academic
+  words individually, which is why it is one signal among several in the
+  ensemble rather than a standalone verdict.
 """
 
 from __future__ import annotations
@@ -52,6 +70,27 @@ HEDGE_PHRASES = [
     "we believe", "we suggest", "we argue", "we propose",
 ]
 
+# Lexical tells disproportionately common in ChatGPT/GPT-4/GPT-5-family
+# output relative to human academic prose -- distinct from HEDGE_PHRASES
+# above, which target generic hedging rather than this generation's
+# transition/elevation vocabulary. See the module docstring for why this
+# is a separate signal from perplexity/burstiness, and why a hit is a
+# stylistic tell rather than proof of AI authorship.
+GPT_TELL_PHRASES = [
+    "delve into", "delves into", "delving into", "boasts", "underscores",
+    "underscore", "in the realm of", "realm of", "testament to",
+    "a testament", "pivotal role", "navigate the complexities",
+    "navigating the complexities", "rapidly evolving", "ever-evolving",
+    "cutting-edge", "game-changer", "meticulously", "intricate",
+    "multifaceted", "holistic", "synergy", "leverage", "leveraging",
+    "seamless", "seamlessly", "robust", "unprecedented", "paradigm shift",
+    "harness the power", "unlock the potential", "at the forefront",
+    "foster", "bolster", "it is important to note", "it's important to note",
+    "it is worth noting", "it's worth noting", "in conclusion", "in summary",
+    "furthermore", "moreover", "notably", "comprehensive understanding",
+    "nuanced", "tapestry of",
+]
+
 
 @dataclass
 class ParagraphAIScore:
@@ -60,6 +99,7 @@ class ParagraphAIScore:
     burstiness: float
     cross_perplexity_ratio: float
     stylometric_score: float       # 0=human, 1=AI
+    gpt_tell_density: float        # GPT-4/GPT-5-era tell phrases per 100 words
     ensemble_score: float          # 0=human, 1=AI (weighted)
     verdict: str                   # HUMAN | UNCERTAIN | AI_LIKELY | AI_DETECTED
     calibrated_language: str
@@ -207,6 +247,7 @@ class AIContentDetector:
             ratio = ppl / obs_ppl if obs_ppl > 0 else 1.0
 
         style_score = self._stylometric_ai_score(text)
+        tell_density = self._gpt_tell_density(text)
 
         # Convert perplexity to a 0-1 AI score
         # Low perplexity (< threshold) = AI-like
@@ -221,13 +262,23 @@ class AIContentDetector:
         ratio_score = max(0.0, 1.0 - (ratio / self.ratio_thresh))
         ratio_score = min(1.0, ratio_score)
 
-        # Ensemble (weighted average)
+        # High GPT-tell density = AI-like. 3 tells per 100 words is treated
+        # as a strong signal -- these are multi-word phrases, so they occur
+        # far less densely in normal prose than single hedge words do.
+        tell_score = min(tell_density / 3.0, 1.0)
+
+        # Ensemble (weighted average). tell_score gets a modest, fixed
+        # weight in both branches: it is a complementary lexical signal
+        # for modern (GPT-4/GPT-5-era) output that perplexity/burstiness
+        # under-detect, not a replacement for either -- see module
+        # docstring.
         if self.use_cross_ppl and self._obs_model:
-            ensemble = 0.30 * ppl_score + 0.20 * burst_score + \
-                       0.25 * ratio_score + 0.25 * style_score
+            ensemble = 0.25 * ppl_score + 0.15 * burst_score + \
+                       0.20 * ratio_score + 0.25 * style_score + \
+                       0.15 * tell_score
         else:
-            ensemble = 0.40 * ppl_score + 0.30 * burst_score + \
-                       0.30 * style_score
+            ensemble = 0.35 * ppl_score + 0.25 * burst_score + \
+                       0.25 * style_score + 0.15 * tell_score
 
         verdict = self._ensemble_verdict(ensemble, threshold)
 
@@ -237,6 +288,7 @@ class AIContentDetector:
             burstiness=round(burstiness, 3),
             cross_perplexity_ratio=round(ratio, 3),
             stylometric_score=round(style_score, 3),
+            gpt_tell_density=round(tell_density, 3),
             ensemble_score=round(ensemble, 3),
             verdict=verdict,
             calibrated_language=lang,
@@ -330,6 +382,17 @@ class AIContentDetector:
 
         return round(sum(signals) / len(signals), 3)
 
+    def _gpt_tell_density(self, text: str) -> float:
+        """
+        Count of GPT_TELL_PHRASES hits per 100 words. See module docstring
+        and GPT_TELL_PHRASES for what this targets and why it's a separate
+        signal from perplexity/burstiness.
+        """
+        word_count = max(len(text.split()), 1)
+        text_lower = text.lower()
+        hits = sum(text_lower.count(p) for p in GPT_TELL_PHRASES)
+        return hits / (word_count / 100)
+
     def _ensemble_verdict(self, score: float, threshold: float) -> str:
         if score < threshold * 0.5:
             return "HUMAN"
@@ -353,6 +416,8 @@ class AIContentDetector:
                 sum(s.perplexity for s in scores) / len(scores), 2) if scores else 0,
             "mean_burstiness": round(
                 sum(s.burstiness for s in scores) / len(scores), 3) if scores else 0,
+            "mean_gpt_tell_density": round(
+                sum(s.gpt_tell_density for s in scores) / len(scores), 3) if scores else 0,
             "ai_paragraph_fraction": ai_frac,
             "detected_language": lang,
             "esl_calibration_applied": lang != "en",

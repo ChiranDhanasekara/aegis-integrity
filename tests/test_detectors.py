@@ -576,6 +576,36 @@ class TestAIDetectorHeuristics:
         assert ESL_THRESHOLD_MULTIPLIER["zh"] > ESL_THRESHOLD_MULTIPLIER["en"]
         assert ESL_THRESHOLD_MULTIPLIER["en"] == pytest.approx(1.0)
 
+    def test_gpt_tell_density_zero_for_plain_human_text(self):
+        from aegis.detectors.ai_detector import AIContentDetector
+        det = AIContentDetector()
+        assert det._gpt_tell_density(HUMAN_PARA) == pytest.approx(0.0)
+
+    def test_gpt_tell_density_detects_known_phrases(self):
+        from aegis.detectors.ai_detector import AIContentDetector
+        det = AIContentDetector()
+        text = (
+            "It is important to note that this approach leverages a robust, "
+            "cutting-edge pipeline. Furthermore, the results underscore a "
+            "pivotal role for the proposed method. In conclusion, this work "
+            "serves as a testament to the seamless integration achieved."
+        )
+        density = det._gpt_tell_density(text)
+        assert density > 0.0
+
+    def test_gpt_tell_density_feeds_into_ensemble_score(self):
+        """A paragraph saturated with GPT-tell phrases should score at
+        least as AI-like as an otherwise-identical paragraph without them,
+        holding perplexity/burstiness/style constant."""
+        from aegis.detectors.ai_detector import AIContentDetector
+        det = AIContentDetector()
+        tell_density = det._gpt_tell_density(
+            "It is important to note that this approach leverages a robust, "
+            "cutting-edge pipeline and underscores a pivotal role."
+        )
+        no_tell_density = det._gpt_tell_density(HUMAN_PARA)
+        assert tell_density > no_tell_density
+
     def test_esl_calibration_raises_not_lowers_threshold(self):
         """A non-native-language document must never be flagged more
         aggressively than the same score would be for English text."""

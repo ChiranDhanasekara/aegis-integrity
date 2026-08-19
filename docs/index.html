@@ -228,7 +228,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
 
 <!-- HERO -->
 <div class="hero">
-  <div class="hero-badge"><span></span>v2.4.0 &nbsp;|&nbsp; Beta &mdash; Human Review Required &nbsp;|&nbsp; August 2026</div>
+  <div class="hero-badge"><span></span>v2.5.0 &nbsp;|&nbsp; Beta &mdash; Human Review Required &nbsp;|&nbsp; August 2026</div>
   <h1>The Integrity Checker<br>That Sees Everything</h1>
   <p class="hero-sub">
     Open-source. Offline. Bias-aware. 11 detection modules in a single pip install.
@@ -392,7 +392,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
     <div class="det-card" style="--dc:#3fb950">
       <div class="det-num">Module 04</div>
       <div class="det-name">ESL-Calibrated AI Content Detection</div>
-      <div class="det-desc">Targets the bias documented by <a href="https://arxiv.org/abs/2304.02819" target="_blank" rel="noopener">Liang et al. (Stanford, 2023)</a>: GPT detectors misclassified more than half of non-native-authored TOEFL essays as AI-generated, one detector flagging up to 98%, while native-English essays were scored accurately. Per-language threshold multipliers for 15 languages. Paragraph-level scoring. GPT-2 perplexity + burstiness + cross-perplexity ratio + stylometric ensemble.</div>
+      <div class="det-desc">Targets the bias documented by <a href="https://arxiv.org/abs/2304.02819" target="_blank" rel="noopener">Liang et al. (Stanford, 2023)</a>: GPT detectors misclassified more than half of non-native-authored TOEFL essays as AI-generated, one detector flagging up to 98%, while native-English essays were scored accurately. Per-language threshold multipliers for 15 languages. Paragraph-level scoring. GPT-2 perplexity + burstiness + cross-perplexity ratio + stylometric ensemble, plus a lexical-tell signal <span class="new-tag">NEW v2.5</span> for the transition/elevation vocabulary disproportionately common in ChatGPT/GPT-4/GPT-5-family output ("delve into", "underscores", "pivotal role", ...) that GPT-2 perplexity alone under-detects against fluent frontier-model text.</div>
     </div>
 
     <div class="det-card" style="--dc:#ffa657">
@@ -454,8 +454,8 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
       <a href="https://github.com/sunilgentyala/aegis-integrity" target="_blank" class="btn btn-primary">
         &#9733; Star the Repo
       </a>
-      <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.4.0" target="_blank" class="btn btn-outline">
-        &#128229; Download v2.4.0
+      <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.5.0" target="_blank" class="btn btn-outline">
+        &#128229; Download v2.5.0
       </a>
       <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank" class="btn btn-outline">
         &#128172; Open an Issue
@@ -480,7 +480,7 @@ footer{border-top:1px solid var(--border);padding:2.5rem 2rem;text-align:center;
           <th>CopyLeaks</th>
           <th>GPTZero</th>
           <th>Originality.ai</th>
-          <th class="ag">AEGIS v2.4</th>
+          <th class="ag">AEGIS v2.5</th>
         </tr>
       </thead>
       <tbody>
@@ -642,11 +642,11 @@ submission (PDF / DOCX / TEX / TXT)
   DocumentParser              -- PyMuPDF / python-docx / TexSoup / striprtf
        |
   ┌────┴────────────────────────────────────────────────────────────────────┐
-  │                        AEGISPipeline v2.4                               │
+  │                        AEGISPipeline v2.5                               │
   │                                                                         │
   │  NGramDetector             word 3-gram + char 5-gram MinHash LSH        │
   │  SemanticDetector          SBERT + FAISS + CrossEncoder reranker        │
-  │  AIContentDetector         GPT-2 perplexity + burstiness + ESL (15L)   │
+  │  AIContentDetector    [v2.5] GPT-2 perplexity+burstiness+ESL(15L)+tell  │
   │  CitationIntegrityDetector Crossref REST API (DOI + metadata check)     │
   │  StylometricAnalyzer       Burrows' Delta; 60-dim feature vector        │
   │  SelfPlagiarismDetector    SBERT + n-gram vs. prior works               │
@@ -686,7 +686,7 @@ submission (PDF / DOCX / TEX / TXT)
   <div style="margin-top:.4rem;color:var(--muted);font-size:.83rem">sunil.gentyala@ieee.org</div>
   <div class="footer-links">
     <a href="https://github.com/sunilgentyala/aegis-integrity" target="_blank">GitHub Repo</a>
-    <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.4.0" target="_blank">v2.4.0 Release</a>
+    <a href="https://github.com/sunilgentyala/aegis-integrity/releases/tag/v2.5.0" target="_blank">v2.5.0 Release</a>
     <a href="https://github.com/sunilgentyala/aegis-integrity/blob/main/README.md" target="_blank">Documentation</a>
     <a href="https://github.com/sunilgentyala/aegis-integrity/issues" target="_blank">Report an Issue</a>
     <a href="https://www.linkedin.com/in/sunilgentyala" target="_blank">LinkedIn</a>
@@ -694,7 +694,7 @@ submission (PDF / DOCX / TEX / TXT)
     <a href="https://github.com/sunilgentyala/aegis-integrity/blob/main/LICENSE" target="_blank">MIT License</a>
   </div>
   <div style="margin-top:1.25rem;font-size:.76rem;color:#484f58">
-    AEGIS v2.4 &nbsp;|&nbsp; Academic Integrity Engine with Generative-AI Scrutiny &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; 2026
+    AEGIS v2.5 &nbsp;|&nbsp; Academic Integrity Engine with Generative-AI Scrutiny &nbsp;|&nbsp; MIT License &nbsp;|&nbsp; 2026
   </div>
 </footer>
 

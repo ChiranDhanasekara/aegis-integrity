@@ -63,6 +63,30 @@ class TestPublisherRegistryClassification:
     def test_claimed_publisher_none_when_no_keyword(self):
         assert claimed_publisher('X. Author, "A study," Journal of Widgets, 2023.') is None
 
+    def test_claimed_publisher_does_not_false_match_quiet(self):
+        # "iet" is a substring of "quiet" -- a bare `in` check would
+        # misclassify this as claiming IET even though it doesn't.
+        assert claimed_publisher(
+            'X. Author, "Design of a quiet cooling system," Journal of Widgets, 2023.'
+        ) is None
+
+    def test_claimed_publisher_does_not_false_match_quieted(self):
+        # "iete" is a substring of "quieted" -- same collision for IETE.
+        assert claimed_publisher(
+            'The noise was quieted using active cancellation, Journal of Widgets, 2023.'
+        ) is None
+
+    def test_claimed_publisher_does_not_false_match_pacman(self):
+        # "acm" is a substring of "pacman" -- same collision for ACM.
+        assert claimed_publisher(
+            'A study of pacman-style scheduling algorithms, Journal of Widgets, 2023.'
+        ) is None
+
+    def test_classify_publisher_does_not_false_match_quiet_container(self):
+        assert classify_publisher(
+            "10.1000/x.2023.1", "International Journal of Quiet Computing"
+        ) is None
+
     def test_resolve_target_publishers_defaults_to_all_six(self):
         profiles = resolve_target_publishers(None)
         assert {p.key for p in profiles} == set(DEFAULT_TARGET_PUBLISHERS)

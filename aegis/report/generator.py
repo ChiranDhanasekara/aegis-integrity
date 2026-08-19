@@ -123,6 +123,7 @@ class ReportGenerator:
                         "ensemble_score": p.ensemble_score,
                         "perplexity": p.perplexity,
                         "burstiness": p.burstiness,
+                        "gpt_tell_density": p.gpt_tell_density,
                     }
                     for p in ai.paragraph_scores
                 ],

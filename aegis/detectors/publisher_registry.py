@@ -34,6 +34,7 @@ not a guarantee.
 """
 
 from __future__ import annotations
+import re
 from dataclasses import dataclass
 from typing import Optional
 
@@ -79,8 +80,8 @@ TARGET_PUBLISHERS: dict[str, PublisherProfile] = {
         display_name="IET (Institution of Engineering and Technology)",
         crossref_member_id="265",
         doi_prefixes=("10.1049",),
-        container_keywords=("iet ", "institution of engineering and technology"),
-        claim_keywords=("iet ", "institution of engineering and technology"),
+        container_keywords=("iet", "institution of engineering and technology"),
+        claim_keywords=("iet", "institution of engineering and technology"),
     ),
     "IETE": PublisherProfile(
         key="IETE",
@@ -103,6 +104,25 @@ TARGET_PUBLISHERS: dict[str, PublisherProfile] = {
 DEFAULT_TARGET_PUBLISHERS: tuple[str, ...] = (
     "IEEE", "ACM", "Elsevier", "IET", "IETE", "BCS",
 )
+
+
+def _keyword_present(text_lower: str, keyword: str) -> bool:
+    """
+    Whole-word/phrase match, not bare substring containment.
+
+    Several of the venue keywords are short and generic ("iet", "iete",
+    "acm", "bcs"), so a plain `keyword in text` check false-matches inside
+    unrelated words -- "a quiet cooling system" contains "iet", "the noise
+    was quieted" contains "iete", "pacman-style scheduling" contains "acm".
+    Each of those would previously produce a spurious VENUE_MISMATCH flag
+    (conference/venue attribution) or a spurious prior-publication
+    classification, with no actual claim of the venue anywhere in the text.
+    Matching only when the keyword isn't glued to a letter/digit on either
+    side keeps single-word abbreviations like "IET" or "ACM" working while
+    ruling out these collisions.
+    """
+    pattern = r"(?<![a-z0-9])" + re.escape(keyword.strip()) + r"(?![a-z0-9])"
+    return re.search(pattern, text_lower) is not None
 
 
 def classify_publisher(
@@ -130,7 +150,7 @@ def classify_publisher(
         if profile.crossref_member_id is not None:
             return profile.key
         if container_lower and any(
-            kw in container_lower for kw in profile.container_keywords
+            _keyword_present(container_lower, kw) for kw in profile.container_keywords
         ):
             return profile.key
     return None
@@ -146,7 +166,7 @@ def claimed_publisher(raw_citation_text: str) -> Optional[str]:
     """
     text_lower = (raw_citation_text or "").lower()
     for profile in TARGET_PUBLISHERS.values():
-        if any(kw in text_lower for kw in profile.claim_keywords):
+        if any(_keyword_present(text_lower, kw) for kw in profile.claim_keywords):
             return profile.key
     return None
 

@@ -1,7 +1,7 @@
 # AEGIS Academic Integrity Checker
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.4.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.5.0-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/offline-first-orange?style=for-the-badge" alt="Offline">
@@ -524,6 +524,33 @@ Website: [sunilgentyala.github.io/aegis-integrity](https://sunilgentyala.github.
 ---
 
 ## Changelog
+
+### v2.5.0 (August 2026)
+- **FIX (correctness, high severity):** Target-publisher keyword matching
+  (`publisher_registry.classify_publisher` / `claimed_publisher`) used bare
+  substring containment on short, generic venue keywords ("iet", "iete",
+  "acm", "bcs"). This false-matched inside unrelated words -- a reference
+  mentioning a "quiet cooling system" was classified as claiming IET, one
+  mentioning noise being "quieted" was classified as claiming IETE, and a
+  "pacman-style scheduling" reference was classified as claiming ACM --
+  each producing a spurious `VENUE_MISMATCH` flag with no real venue claim
+  present. Matching now requires the keyword not be glued to a letter/digit
+  on either side (whole-word/phrase match), eliminating the collision
+  while leaving genuine "IEEE Trans...", "Proc. ACM...", "IET
+  Communications" matches unaffected.
+- **NEW:** GPT-4/GPT-5-era lexical-tell signal in the AI content detector.
+  GPT-2 perplexity/burstiness -- the detector's core signal -- was designed
+  against GPT-2-era output and under-detects frontier chat models
+  (GPT-4o-, GPT-5-class, and comparably RLHF-tuned models), which produce
+  far more fluent, human-like perplexity and burstiness than GPT-2 ever
+  did. Adds a complementary lexical signal (`GPT_TELL_PHRASES`) covering
+  transition/elevation vocabulary disproportionately common in
+  ChatGPT/GPT-4/GPT-5-family output ("delve into", "underscores", "pivotal
+  role", "leverage", "in conclusion", ...), reported per-paragraph as
+  `gpt_tell_density` and folded into the ensemble score at a modest, fixed
+  weight alongside perplexity/burstiness/stylometrics -- a hit is a
+  stylistic tell, not proof of AI authorship, consistent with this
+  project's existing no-overclaiming stance (see watermark detector).
 
 ### v2.4.0 (August 2026)
 - **NEW:** Target-Publisher Verification module (detector #11), scoping
