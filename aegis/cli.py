@@ -88,6 +88,14 @@ def cli():
 @click.option("--target-publishers", default=None,
               help="Comma-separated subset of IEEE,ACM,Elsevier,IET,IETE,BCS to check "
                    "(default: all six).")
+@click.option("--no-math", is_flag=True,
+              help="Skip mathematical formula checking (equation numbering/notation).")
+@click.option("--no-grammar", is_flag=True,
+              help="Skip grammar & language convention checking.")
+@click.option("--guidelines", default=None,
+              help="Comma-separated subset of IEEE,ACM,BCS,IET,ISACA to run per-venue "
+                   "guideline compliance for, checked SEPARATELY per venue "
+                   "(default: none -- opt-in). Pass 'all' for all five.")
 @click.option("--watermark-mode",
               type=click.Choice(["disabled", "experimental", "verified_scheme"]),
               default="experimental", show_default=True,
@@ -102,6 +110,7 @@ def analyze(
     submission, corpus, prior_works, index_dir,
     output, output_html, no_ai, no_citations, no_semantic,
     no_stylometric, no_self_plagiarism, no_venue_check, target_publishers,
+    no_math, no_grammar, guidelines,
     watermark_mode, device, email,
 ):
     """Run the full AEGIS analysis on SUBMISSION (PDF, DOCX, TEX, or TXT)."""
@@ -109,12 +118,19 @@ def analyze(
     from aegis.corpus.indexer import CorpusIndexer
     from aegis.detectors.watermark_detector import WatermarkMode
     from aegis.detectors.publisher_registry import DEFAULT_TARGET_PUBLISHERS
+    from aegis.guidelines.profiles import DEFAULT_GUIDELINE_VENUES
     from aegis.report.generator import ReportGenerator
 
     venue_targets = (
         tuple(p.strip() for p in target_publishers.split(",") if p.strip())
         if target_publishers else DEFAULT_TARGET_PUBLISHERS
     )
+    if guidelines and guidelines.strip().lower() == "all":
+        guideline_venues = DEFAULT_GUIDELINE_VENUES
+    elif guidelines:
+        guideline_venues = tuple(v.strip() for v in guidelines.split(",") if v.strip())
+    else:
+        guideline_venues = ()
 
     cfg = PipelineConfig(
         device=device,
@@ -126,6 +142,9 @@ def analyze(
         run_self_plagiarism=not no_self_plagiarism,
         run_venue_verification=not no_venue_check,
         venue_target_publishers=venue_targets,
+        run_math_check=not no_math,
+        run_grammar_check=not no_grammar,
+        guideline_venues=guideline_venues,
         watermark_mode=WatermarkMode(watermark_mode),
     )
     pipeline = AEGISPipeline(config=cfg)
@@ -185,6 +204,29 @@ def analyze(
             f"{len(vv.prior_publication_matches)} possible duplicate(s) found"
         )
 
+    if report.math_result:
+        mr = report.math_result
+        console.print(
+            f"Math formula check: {mr.equations_found} equation(s) found "
+            f"({len(mr.all_issues)} issue(s), via {mr.extraction_method})"
+        )
+
+    if report.grammar_result:
+        gr = report.grammar_result
+        console.print(
+            f"Grammar & language check: quality score {gr.quality_score:.2f} "
+            f"({len(gr.issues)} issue categor{'y' if len(gr.issues)==1 else 'ies'} flagged, "
+            f"spelling: {gr.spelling_variant_detected})"
+        )
+
+    if report.guideline_results:
+        console.print("[bold]Guideline compliance (checked separately per venue):[/]")
+        status_colors = {"COMPLIANT": "green", "NEEDS_REVIEW": "yellow", "NOT_ENOUGH_DATA": "dim"}
+        for venue, res in report.guideline_results.items():
+            color = status_colors.get(res.overall_status, "white")
+            console.print(f"  [{color}]{venue}: {res.overall_status}[/] "
+                           f"({res.needs_review_count} item(s) need review)")
+
     if report.flags:
         console.print("[bold]Flags:[/]")
         for flag in report.flags:
@@ -206,6 +248,94 @@ def analyze(
 
     # Exit code reflects risk
     sys.exit(0 if report.overall_risk in ("LOW", "MEDIUM") else 1)
+
+
+# ---------------------------------------------------------------------------
+# guidelines (fast, ML-free math + grammar + per-venue compliance scan)
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.argument("submission", type=click.Path(exists=True))
+@click.option("--venues", default="all", show_default=True,
+              help="Comma-separated subset of IEEE,ACM,BCS,IET,ISACA, or 'all'. "
+                   "Each venue is checked SEPARATELY against its own sourced "
+                   "style guidance -- see aegis/guidelines/profiles.py.")
+@click.option("--output", "-o", default=None, type=click.Path(),
+              help="Write JSON report to this path.")
+@click.option("--html", "output_html", default=None, type=click.Path(),
+              help="Write HTML report to this path.")
+def guidelines(submission, venues, output, output_html):
+    """
+    Fast, offline-only scan: mathematical formula checks + grammar/language
+    checks + per-venue guideline compliance (IEEE/ACM/BCS/IET/ISACA).
+
+    Unlike `analyze`, this runs no ML models (no GPT-2, no SBERT, no
+    Crossref calls) -- just the pure-Python math/grammar/guideline
+    detectors -- so it is fast enough to run on every draft.
+    """
+    from aegis.core.pipeline import AEGISPipeline, PipelineConfig
+    from aegis.guidelines.profiles import DEFAULT_GUIDELINE_VENUES
+    from aegis.report.generator import ReportGenerator
+
+    venue_list = (
+        list(DEFAULT_GUIDELINE_VENUES) if venues.strip().lower() == "all"
+        else [v.strip() for v in venues.split(",") if v.strip()]
+    )
+
+    cfg = PipelineConfig(
+        run_ai_detector=False, run_citation_check=False, run_semantic=False,
+        run_stylometric=False, run_self_plagiarism=False,
+        run_watermark_detector=False, run_citation_network=False,
+        run_coherence_analyzer=False, run_venue_verification=False,
+        run_math_check=True, run_grammar_check=True,
+        guideline_venues=tuple(venue_list),
+    )
+    pipeline = AEGISPipeline(config=cfg)
+
+    console.print(f"\nRunning guideline compliance scan on [bold]{submission}[/] "
+                  f"for: {', '.join(venue_list)}...")
+    report = pipeline.analyze(submission)
+
+    if report.math_result:
+        mr = report.math_result
+        console.print(Panel(
+            f"Equations found: [bold]{mr.equations_found}[/] "
+            f"(extraction: {mr.extraction_method})\n"
+            f"Issues: {len(mr.all_issues)}",
+            title="Mathematical Formula Check",
+        ))
+        for issue in mr.all_issues:
+            console.print(f"  [yellow]•[/] [{issue.severity}] {issue.message}")
+
+    if report.grammar_result:
+        gr = report.grammar_result
+        console.print(Panel(
+            f"Quality score: [bold]{gr.quality_score:.2f}[/]  |  "
+            f"Words: {gr.word_count}  |  "
+            f"Spelling: {gr.spelling_variant_detected}",
+            title="Grammar & Language Check",
+        ))
+        for issue in gr.issues:
+            console.print(f"  [yellow]•[/] [{issue.severity}] {issue.message}")
+
+    status_colors = {"COMPLIANT": "green", "NEEDS_REVIEW": "yellow", "NOT_ENOUGH_DATA": "dim"}
+    for venue, res in report.guideline_results.items():
+        color = status_colors.get(res.overall_status, "white")
+        t = Table(f"{res.display_name}", "Status", "Detail", box=box.SIMPLE)
+        for c in res.checks:
+            t.add_row(c.rule, f"[{status_colors.get(c.status,'white')}]{c.status}[/]", c.detail)
+        console.print(Panel.fit(t, title=f"[{color}]{venue}: {res.overall_status}[/]",
+                                 subtitle=res.source_name))
+
+    if output or output_html:
+        report_dir = str(Path(output).parent) if output else str(Path(output_html).parent)
+        reporter = ReportGenerator(report_dir)
+        if output:
+            path = reporter.generate_json(report, Path(output).name)
+            console.print(f"\nJSON report: [cyan]{path}[/]")
+        if output_html:
+            path = reporter.generate_html(report, Path(output_html).name)
+            console.print(f"HTML report: [cyan]{path}[/]")
 
 
 # ---------------------------------------------------------------------------

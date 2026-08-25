@@ -197,6 +197,34 @@ aegis serve --host 0.0.0.0 --port 8080
 aegis serve --reload                 # development hot-reload
 ```
 
+### 4.11 Guideline compliance scan (math + grammar + per-venue, no ML)
+
+`aegis guidelines` runs only the pure-Python math-formula and grammar/language
+checkers (no GPT-2, no SBERT, no Crossref calls), then evaluates the result
+against each requested publisher's own sourced style guidance **separately**:
+
+```bash
+# All five venues, checked independently:
+aegis guidelines paper.pdf --venues all
+
+# Just the venues you're actually targeting:
+aegis guidelines paper.pdf --venues IEEE,ACM
+
+# Save a report:
+aegis guidelines paper.pdf --venues all --output guidelines.json --html guidelines.html
+```
+
+Each venue reports `COMPLIANT`, `NEEDS_REVIEW`, or `NOT_ENOUGH_DATA` -- never
+`FAIL` -- because these are style conventions (spelling variant, contractions,
+equation-reference phrasing, citation-marker style, word count, list density),
+not academic-integrity findings. To fold the same checks into a full
+`aegis analyze` run instead of a standalone scan:
+
+```bash
+aegis analyze paper.pdf --guidelines all       # or a comma-separated subset
+aegis analyze paper.pdf --no-math --no-grammar # skip both checkers entirely
+```
+
 ---
 
 ## 5. Python API
@@ -526,6 +554,37 @@ curl -X POST http://localhost:8000/analyze \
 - **Layer 3:** SBERT cosine >= 0.88 (paraphrase recycling across languages)
 - **Modes:** corpus (prior works) or pairwise (two documents)
 - **Gap filled:** self-plagiarism open to individual authors without ScholarOne access
+
+### 8.7 Math Formula Checker (v3.0; no ML)
+
+- **Extraction:** LaTeX `\begin{equation}`/`align`/`eqnarray`/... (source read directly,
+  since `DocumentParser` strips these from `full_text`); Word OMML math XML (`m:oMath`,
+  read from the raw `.docx` zip -- `python-docx` has no public API for it); text-pattern
+  heuristics for PDF/TXT
+- **Checks:** numbering (duplicates/gaps/order), dangling references, orphaned equations,
+  reference-phrasing consistency, exponential/percentage/decimal notation, LaTeX brace balance
+- **Gap filled:** no other integrity tool checks equation numbering or notation at all
+- **Never affects `overall_risk`** -- compliance/quality signal only
+
+### 8.8 Grammar & Language Checker (v3.0; regex + optional spaCy)
+
+- **Checks:** contractions, US/UK spelling-consistency (30+ word pairs), subject/verb
+  agreement heuristics, common usage errors, repeated words, long-sentence flagging
+- **Backend:** pure regex by default; uses spaCy sentence segmentation if `en_core_web_sm`
+  is installed (same optional dependency as the rest of AEGIS -- no new requirement)
+- **Gap filled:** no plagiarism/AI-detection tool also checks mechanical grammar/usage
+- **Never affects `overall_risk`** -- compliance/quality signal only
+
+### 8.9 Guideline Compliance Checker (v3.0; no ML)
+
+- **Venues:** IEEE, ACM, BCS, IET, ISACA -- each checked **separately** against its own
+  sourced style guidance (`aegis/guidelines/profiles.py` documents every source)
+- **Rules checked:** spelling variant, contractions, first/second-person address (ISACA),
+  equation reference style, notation conventions, citation-marker style, word count,
+  bulleted-list density
+- **Verdicts:** `PASS` / `NEEDS_REVIEW` / `NOT_ENOUGH_DATA` per rule -- advisory, never `FAIL`
+- **Gap filled:** every other tool applies one generic rule set, if any, instead of the
+  actual target venue's own documented conventions
 
 ---
 

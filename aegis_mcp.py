@@ -82,24 +82,32 @@ def aegis_analyze_paper(
     prior_works_dir: str = "",
     skip_ai_detection: bool = False,
     skip_citations: bool = False,
+    check_guidelines: str = "",
     html_report: bool = True,
 ) -> str:
-    """Analyze an academic paper (PDF/DOCX/TEX/TXT) with AEGIS v2.5.
+    """Analyze an academic paper (PDF/DOCX/TEX/TXT) with AEGIS v3.0.
 
-    Runs all 11 detection modules: n-gram and semantic plagiarism, ESL-calibrated
+    Runs 13 detection modules: n-gram and semantic plagiarism, ESL-calibrated
     AI content detection, Crossref citation hallucination verification, LLM watermark
     detection, stylometric ghostwriting profiling, self-plagiarism, semantic coherence,
-    and target-publisher verification (citation-claim + duplicate-submission checks
-    scoped to IEEE, ACM, Elsevier, IET, IETE, and BCS via Crossref metadata).
+    target-publisher verification (citation-claim + duplicate-submission checks scoped
+    to IEEE, ACM, Elsevier, IET, IETE, and BCS via Crossref metadata), mathematical
+    formula checking (equation numbering/reference integrity, notation conventions),
+    and grammar/language convention checking -- all offline, no extra ML dependency.
 
     Use before any IEEE paper submission, or whenever asked about plagiarism,
-    AI detection, citation integrity, or paper authenticity.
+    AI detection, citation integrity, paper authenticity, or formula/grammar quality.
+    For a fast math+grammar-only pass without the ML models, use
+    aegis_check_guidelines instead.
 
     Args:
         file_path: Absolute path to the paper file.
         prior_works_dir: Optional directory of your own prior papers for self-plagiarism.
         skip_ai_detection: Skip GPT-2 AI detection (faster). Default False.
         skip_citations: Skip Crossref citation lookup (offline mode). Default False.
+        check_guidelines: Comma-separated subset of IEEE,ACM,BCS,IET,ISACA to run
+            per-venue guideline compliance for, checked SEPARATELY per venue, or
+            "all" for all five. Empty (default) skips this section.
         html_report: Also save a self-contained HTML report. Default True.
     """
     stem = Path(file_path).stem
@@ -114,6 +122,8 @@ def aegis_analyze_paper(
         args.append("--no-ai")
     if skip_citations:
         args.append("--no-citations")
+    if check_guidelines:
+        args += ["--guidelines", check_guidelines]
 
     output = _run(args, timeout=900)
     if Path(json_out).exists():
@@ -154,6 +164,37 @@ def aegis_check_citations(file_path: str) -> str:
         "--output", json_out,
     ]
     return _run(args, timeout=300)
+
+
+@mcp.tool()
+def aegis_check_guidelines(file_path: str, venues: str = "all", html_report: bool = True) -> str:
+    """Fast, offline math + grammar + per-venue publisher-guideline compliance scan.
+
+    Runs no ML models (no GPT-2/SBERT/Crossref calls) -- just the
+    mathematical-formula checker (equation numbering, dangling/orphaned
+    references, notation conventions) and the grammar/language checker
+    (contractions, US/UK spelling consistency, subject/verb agreement,
+    common usage errors), then evaluates the result against each requested
+    publisher's own sourced style guidance SEPARATELY. Use this for a fast
+    style/formatting pass on any draft, independent of (and in addition
+    to) aegis_analyze_paper's plagiarism/AI/citation checks.
+
+    Args:
+        file_path: Absolute path to the paper file (PDF/DOCX/TEX/TXT).
+        venues: Comma-separated subset of IEEE,ACM,BCS,IET,ISACA, or "all"
+            (default) to check all five, each reported separately.
+        html_report: Also save a self-contained HTML report. Default True.
+    """
+    stem = Path(file_path).stem
+    json_out = str(REPORT_DIR / f"{stem}_guidelines.json")
+    args = ["guidelines", file_path, "--venues", venues, "--output", json_out]
+    if html_report:
+        args += ["--html", str(REPORT_DIR / f"{stem}_guidelines.html")]
+
+    output = _run(args, timeout=120)
+    if Path(json_out).exists():
+        output += f"\n\nReport saved to: {json_out}"
+    return output
 
 
 @mcp.tool()

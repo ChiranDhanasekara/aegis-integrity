@@ -296,6 +296,58 @@ class ReportGenerator:
                 ],
             }
 
+        # Mathematical formula checking (v3.0; compliance signal only)
+        if r.math_result:
+            m = r.math_result
+            d["math_check"] = {
+                "equations_found": m.equations_found,
+                "equation_numbers": m.equation_numbers,
+                "extraction_method": m.extraction_method,
+                "limitations": m.limitations,
+                "issues": [
+                    {"category": i.category, "severity": i.severity,
+                     "message": i.message, "rule_source": i.rule_source}
+                    for i in m.all_issues
+                ],
+            }
+
+        # Grammar & language convention checking (v3.0; compliance signal only)
+        if r.grammar_result:
+            g = r.grammar_result
+            d["grammar_check"] = {
+                "word_count": g.word_count,
+                "sentence_count": g.sentence_count,
+                "avg_sentence_length": g.avg_sentence_length,
+                "spelling_variant_detected": g.spelling_variant_detected,
+                "spelling_variant_counts": g.spelling_variant_counts,
+                "contraction_count": g.contraction_count,
+                "quality_score": g.quality_score,
+                "nlp_backend": g.nlp_backend,
+                "issues": [
+                    {"category": i.category, "severity": i.severity,
+                     "message": i.message, "count": i.count,
+                     "examples": i.examples, "rule_source": i.rule_source}
+                    for i in g.issues
+                ],
+            }
+
+        # Per-venue guideline compliance (v3.0; run separately per venue)
+        if r.guideline_results:
+            d["guideline_compliance"] = {
+                venue: {
+                    "display_name": res.display_name,
+                    "source_name": res.source_name,
+                    "source_url": res.source_url,
+                    "overall_status": res.overall_status,
+                    "checks": [
+                        {"rule": c.rule, "status": c.status,
+                         "detail": c.detail, "source": c.source}
+                        for c in res.checks
+                    ],
+                }
+                for venue, res in r.guideline_results.items()
+            }
+
         return d
 
     # ------------------------------------------------------------------
@@ -346,6 +398,9 @@ class ReportGenerator:
         citation_network_section = self._citation_network_section(data.get("citation_network"))
         coherence_section = self._coherence_section(data.get("coherence"))
         venue_verification_section = self._venue_verification_section(data.get("venue_verification"))
+        math_section = self._math_section(data.get("math_check"))
+        grammar_section = self._grammar_section(data.get("grammar_check"))
+        guideline_section = self._guideline_section(data.get("guideline_compliance"))
 
         scores = data["scores"]
 
@@ -469,6 +524,17 @@ class ReportGenerator:
   <!-- Watermark analysis -->
   <h2>LLM Watermark Analysis</h2>
   <div class="section">{watermark_section}</div>
+
+  <!-- Math + grammar compliance (informational -- never affects overall risk) -->
+  <h2>Mathematical Formula Check <small style="font-weight:400;color:#7f8c8d;">(compliance signal, not misconduct)</small></h2>
+  <div class="section">{math_section}</div>
+
+  <h2>Grammar &amp; Language Convention Check <small style="font-weight:400;color:#7f8c8d;">(compliance signal, not misconduct)</small></h2>
+  <div class="section">{grammar_section}</div>
+
+  <!-- Per-venue guideline compliance -->
+  <h2>Publisher Guideline Compliance (IEEE / ACM / BCS / IET / ISACA, checked separately)</h2>
+  <div class="section">{guideline_section}</div>
 
   <footer>AEGIS Academic Integrity Tool v{AEGIS_VERSION} &mdash; open-source</footer>
 </div>
@@ -852,6 +918,94 @@ class ReportGenerator:
             f"&nbsp;|&nbsp; Section template match: {co['section_template_match']*100:.0f}%</p>"
             f"{flags_html}"
         )
+
+    GUIDELINE_STATUS_COLORS = {
+        "PASS": "#27ae60", "COMPLIANT": "#27ae60",
+        "NEEDS_REVIEW": "#f39c12",
+        "NOT_ENOUGH_DATA": "#95a5a6",
+    }
+
+    def _status_badge(self, status: str) -> str:
+        color = self.GUIDELINE_STATUS_COLORS.get(status, "#95a5a6")
+        return f'<span class="verdict" style="background:{color}">{status}</span>'
+
+    def _math_section(self, m: Optional[dict]) -> str:
+        if not m:
+            return "<p class='no-data'>Math formula check was skipped or unavailable.</p>"
+        if not m.get("issues") and m.get("equations_found", 0) == 0:
+            return "<p class='no-data'>No numbered equations were found in this document.</p>"
+        rows = "".join(
+            f"<tr><td>{self._esc(i['category'])}</td>"
+            f"<td>{i['severity']}</td>"
+            f"<td>{self._esc(i['message'])}</td>"
+            f"<td><small>{self._esc(i['rule_source'])}</small></td></tr>"
+            for i in m.get("issues", [])
+        )
+        table = (
+            f"<table><thead><tr><th>Category</th><th>Severity</th>"
+            f"<th>Issue</th><th>Source</th></tr></thead><tbody>{rows}</tbody></table>"
+            if rows else "<p>No issues found among the detected equations.</p>"
+        )
+        limitations = (
+            "<details><summary>Limitations</summary><ul>"
+            + "".join(f"<li>{self._esc(lim)}</li>" for lim in m.get("limitations", []))
+            + "</ul></details>"
+        ) if m.get("limitations") else ""
+        return (
+            f"<p>Equations found: <strong>{m['equations_found']}</strong> "
+            f"(extraction method: {self._esc(m['extraction_method'])})</p>"
+            f"{table}{limitations}"
+        )
+
+    def _grammar_section(self, g: Optional[dict]) -> str:
+        if not g:
+            return "<p class='no-data'>Grammar &amp; language check was skipped or unavailable.</p>"
+        rows = "".join(
+            f"<tr><td>{self._esc(i['category'])}</td>"
+            f"<td>{i['severity']}</td>"
+            f"<td>{i['count']}</td>"
+            f"<td>{self._esc(i['message'])}</td></tr>"
+            for i in g.get("issues", [])
+        )
+        table = (
+            f"<table><thead><tr><th>Category</th><th>Severity</th>"
+            f"<th>Count</th><th>Issue</th></tr></thead><tbody>{rows}</tbody></table>"
+            if rows else "<p>No mechanical grammar/usage issues found.</p>"
+        )
+        variant = g.get("spelling_variant_detected", "UNKNOWN")
+        counts = g.get("spelling_variant_counts", {})
+        return (
+            f"<p>Word count: {g['word_count']} &nbsp;|&nbsp; "
+            f"Avg. sentence length: {g['avg_sentence_length']} words &nbsp;|&nbsp; "
+            f"NLP backend: {self._esc(g.get('nlp_backend','?'))}</p>"
+            f"<p>Spelling variant detected: <strong>{variant}</strong> "
+            f"(UK: {counts.get('UK',0)}, US: {counts.get('US',0)}) &nbsp;|&nbsp; "
+            f"Quality score: {g['quality_score']:.2f}</p>"
+            f"{table}"
+        )
+
+    def _guideline_section(self, gc: Optional[dict]) -> str:
+        if not gc:
+            return ("<p class='no-data'>Guideline compliance was not requested for this "
+                    "run (opt-in per venue: IEEE, ACM, BCS, IET, ISACA).</p>")
+        cards = []
+        for venue, res in gc.items():
+            rows = "".join(
+                f"<tr><td>{self._esc(c['rule'])}</td>"
+                f"<td>{self._status_badge(c['status'])}</td>"
+                f"<td>{self._esc(c['detail'])}</td></tr>"
+                for c in res.get("checks", [])
+            )
+            cards.append(
+                f"<details open><summary>{self._esc(res['display_name'])} "
+                f"{self._status_badge(res['overall_status'])}</summary>"
+                f"<p><small>Source: <a href=\"{self._esc(res['source_url'])}\">"
+                f"{self._esc(res['source_name'])}</a></small></p>"
+                f"<table><thead><tr><th>Rule</th><th>Status</th>"
+                f"<th>Detail</th></tr></thead><tbody>{rows}</tbody></table>"
+                f"</details>"
+            )
+        return "".join(cards)
 
     def _privacy_disclosure(self, network_activity: dict) -> str:
         if not network_activity:

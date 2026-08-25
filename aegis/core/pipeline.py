@@ -14,8 +14,18 @@ Execution order:
  10. Semantic coherence analysis (discourse connectors; sentence uniformity)
  11. Target-publisher verification (IEEE/ACM/Elsevier/IET/IETE/BCS-scoped
      citation-claim checks and duplicate-submission search via Crossref)
+ 12. Mathematical formula checking (equation numbering/reference integrity,
+     notation conventions -- offline, no ML dependency)
+ 13. Grammar & language convention checking (contractions, US/UK spelling
+     consistency, subject/verb agreement, usage -- offline, no ML dependency)
+ 14. Per-venue guideline compliance (IEEE/ACM/BCS/IET/ISACA, checked
+     SEPARATELY -- opt-in via PipelineConfig.guideline_venues)
 
 Each detector runs independently; results are merged into AnalysisReport.
+Detectors 12-14 are compliance/quality signals, not misconduct signals:
+they are reported for visibility but never feed into overall_risk (see
+_assess_overall_risk) -- bad grammar or a nonstandard equation reference
+is not evidence of academic misconduct.
 """
 
 from __future__ import annotations
@@ -38,6 +48,9 @@ from aegis.detectors.citation_network import CitationNetworkAnalyzer, CitationNe
 from aegis.detectors.coherence_analyzer import SemanticCoherenceAnalyzer, CoherenceResult
 from aegis.detectors.venue_verification import TargetPublisherVerifier, VenueVerificationResult
 from aegis.detectors.publisher_registry import DEFAULT_TARGET_PUBLISHERS
+from aegis.detectors.math_formula import MathFormulaChecker, MathAnalysisResult
+from aegis.detectors.grammar import GrammarLanguageChecker, GrammarAnalysisResult
+from aegis.guidelines.checker import GuidelineComplianceChecker, GuidelineComplianceResult
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +116,15 @@ class PipelineConfig:
     venue_title_similarity_threshold: float = 0.75
     venue_offline: bool = False
 
+    # Grammar & language checker (v3.0) -- pure-Python + optional spaCy
+    grammar_long_sentence_words: int = 45
+    grammar_use_spacy: bool = True
+
+    # Per-venue guideline compliance (v3.0) -- opt-in; empty tuple = skip.
+    # Populate with e.g. ("IEEE", "ACM", "BCS", "IET", "ISACA") to run all
+    # five SEPARATELY (each gets its own GuidelineComplianceResult).
+    guideline_venues: tuple[str, ...] = ()
+
     # Runtime
     device: str = "cpu"
     run_ai_detector: bool = True
@@ -114,6 +136,8 @@ class PipelineConfig:
     run_citation_network: bool = True
     run_coherence_analyzer: bool = True
     run_venue_verification: bool = True
+    run_math_check: bool = True
+    run_grammar_check: bool = True
 
 
 @dataclass
@@ -139,6 +163,11 @@ class AnalysisReport:
     citation_network_result: Optional[CitationNetworkResult] = None
     coherence_result: Optional[CoherenceResult] = None
     venue_verification_result: Optional[VenueVerificationResult] = None
+
+    # v3.0 results -- compliance/quality signals, never part of overall_risk
+    math_result: Optional[MathAnalysisResult] = None
+    grammar_result: Optional[GrammarAnalysisResult] = None
+    guideline_results: dict[str, GuidelineComplianceResult] = field(default_factory=dict)
 
     # Aggregate risk scores (0.0 - 1.0)
     plagiarism_score: float = 0.0    # combined n-gram + semantic
@@ -248,6 +277,13 @@ class AEGISPipeline:
             title_similarity_threshold=self.cfg.venue_title_similarity_threshold,
             offline=self.cfg.venue_offline,
         ) if self.cfg.run_venue_verification else None
+
+        self._math_checker = MathFormulaChecker() if self.cfg.run_math_check else None
+
+        self._grammar_checker = GrammarLanguageChecker(
+            use_spacy=self.cfg.grammar_use_spacy,
+            long_sentence_words=self.cfg.grammar_long_sentence_words,
+        ) if self.cfg.run_grammar_check else None
 
         self._corpus_loaded = False
 
@@ -469,7 +505,54 @@ class AEGISPipeline:
                 logger.warning("Target-publisher verification failed: %s", exc)
                 _status("venue_verification", "failed", str(exc))
 
-        # 12. Overall risk and flags
+        # 12. Mathematical formula checking (compliance signal; never
+        # affects overall_risk)
+        if not self._math_checker:
+            _status("math_check", "disabled")
+        else:
+            logger.info("Running math formula checker...")
+            try:
+                report.math_result = self._math_checker.analyze(
+                    submission_path, parsed.format, full_text)
+                _status("math_check", "completed")
+            except Exception as exc:
+                logger.warning("Math formula checker failed: %s", exc)
+                _status("math_check", "failed", str(exc))
+
+        # 13. Grammar & language convention checking (compliance signal;
+        # never affects overall_risk)
+        if not self._grammar_checker:
+            _status("grammar_check", "disabled")
+        else:
+            logger.info("Running grammar & language checker...")
+            try:
+                report.grammar_result = self._grammar_checker.analyze(parsed.body_text)
+                _status("grammar_check", "completed")
+            except Exception as exc:
+                logger.warning("Grammar checker failed: %s", exc)
+                _status("grammar_check", "failed", str(exc))
+
+        # 14. Per-venue guideline compliance (opt-in; runs each requested
+        # venue SEPARATELY -- see aegis.guidelines)
+        if not self.cfg.guideline_venues:
+            _status("guideline_compliance", "disabled")
+        else:
+            logger.info("Running guideline compliance for: %s",
+                        ", ".join(self.cfg.guideline_venues))
+            try:
+                checker = GuidelineComplianceChecker(
+                    math_result=report.math_result,
+                    grammar_result=report.grammar_result,
+                    full_text=full_text,
+                    word_count=parsed.word_count,
+                )
+                report.guideline_results = checker.check_all(list(self.cfg.guideline_venues))
+                _status("guideline_compliance", "completed")
+            except Exception as exc:
+                logger.warning("Guideline compliance check failed: %s", exc)
+                _status("guideline_compliance", "failed", str(exc))
+
+        # 15. Overall risk and flags
         report.overall_risk, report.flags = self._assess_overall_risk(report)
         report.elapsed_seconds = round(time.time() - t0, 2)
 
@@ -685,5 +768,13 @@ class AEGISPipeline:
                     f"provenance evidence, requires manual review, and does not "
                     f"by itself establish academic misconduct."
                 )
+
+        # Math/grammar compliance flags are appended AFTER risk is final --
+        # they are quality/style signals, not misconduct signals, and must
+        # never move the LOW/MEDIUM/HIGH/CRITICAL verdict computed above.
+        if report.math_result:
+            flags.extend(report.math_result.flags)
+        if report.grammar_result:
+            flags.extend(report.grammar_result.flags)
 
         return risk, flags

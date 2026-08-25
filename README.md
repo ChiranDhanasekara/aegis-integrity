@@ -1,7 +1,7 @@
 # AEGIS Academic Integrity Checker
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.5.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.0.0-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/offline-first-orange?style=for-the-badge" alt="Offline">
@@ -18,11 +18,11 @@
 
 ## How AEGIS Compares
 
-Every major integrity tool has blind spots. AEGIS v2.5 aims to close **eleven** of them simultaneously.
+Every major integrity tool has blind spots. AEGIS v3.0 aims to close **fourteen** of them simultaneously.
 
 Based on each vendor's public documentation and pricing pages as of August 2026. "Not public" means the capability isn't documented publicly by that vendor -- not a confirmed absence. [Corrections welcome](https://github.com/sunilgentyala/aegis-integrity/issues).
 
-| Gap | Turnitin | iThenticate | CopyLeaks | GPTZero | Originality.ai | **AEGIS v2.5** |
+| Gap | Turnitin | iThenticate | CopyLeaks | GPTZero | Originality.ai | **AEGIS v3.0** |
 |-----|:--------:|:-----------:|:---------:|:-------:|:--------------:|:--------------:|
 | Open-source / self-hostable | No | No | No | No | No | **Yes** |
 | Citation hallucination detection | Not public | Not public | Not public | Not public | Not public | **Yes** |
@@ -38,13 +38,16 @@ Based on each vendor's public documentation and pricing pages as of August 2026.
 | Semantic coherence AI-polish detection | Not public | Not public | Not public | Not public | Not public | **Yes** |
 | OpenAlex journal quality integration | Not public | Not public | Not public | Not public | Not public | **Yes** |
 | Fully explainable per-sentence reports | Not public | Not public | Partial | Partial | Not public | **Yes** |
+| Mathematical formula checking (equation numbering, dangling references, notation) | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| Grammar & language convention checking (contractions, US/UK spelling, agreement) | Not public | Not public | Not public | Not public | Not public | **Yes** |
+| Per-venue publisher guideline compliance (IEEE/ACM/BCS/IET/ISACA, checked separately) | Not public | Not public | Not public | Not public | Not public | **Yes** |
 | Offline / air-gapped operation | No | No | No | No | No | **Yes** |
 | REST API + CLI (free) | No | Paid | Paid | Paid | Paid | **Yes** |
 | Pricing model | Institutional (not public) | Institutional (not public) | Paid (self-serve) | Paid (self-serve) | Paid (self-serve) | **$0.00 (self-hosted)** |
 
 ---
 
-## Eleven Detection Modules
+## Fourteen Detection Modules
 
 ### 1. Citation Hallucination Detection
 Resolves every DOI via the Crossref REST API and cross-checks author, year, and title.
@@ -150,6 +153,50 @@ Crossref metadata:
 Configurable via `--target-publishers IEEE,ACM,...` (CLI) or
 `PipelineConfig.venue_target_publishers` (Python API); defaults to all six.
 
+### 12. Mathematical Formula Checking (v3.0 -- novel)
+Checks the structural integrity of numbered equations: consecutive numbering
+(catches duplicates, gaps, and out-of-order numbers), dangling in-text references
+to equation numbers that don't exist (a common leftover from renumbering during
+revision), orphaned equations that are numbered but never referenced, and a set of
+notation conventions sourced from actual publisher style manuals -- exponential
+notation (`5E03` vs. `5×10³`), decimal leading zeros, percentage-range formatting,
+and doubly-parenthesised references. Equations are extracted from LaTeX source
+(`\begin{equation}`/`align`/`eqnarray`/...), from Word's native OMML math XML
+(`python-docx` doesn't expose this at all -- `Paragraph.text` silently skips every
+equation in a `.docx`), or via text-pattern heuristics for PDF/TXT. Pure Python,
+no ML dependency. **This is a compliance/quality signal, not a misconduct signal --
+it never affects `overall_risk`.**
+
+### 13. Grammar & Language Convention Checking (v3.0 -- novel)
+An offline, dependency-light grammar/usage checker: contraction detection
+(`"don't"` in formal text), US/UK spelling-consistency detection across 30+ word
+pairs, subject/verb agreement heuristics (`"the data is"` vs. `"the data are"`),
+common usage errors (`"comprised of"`, `"could of"`, `"less samples"` vs. `"fewer
+samples"`, decade/acronym apostrophe misuse), and readability metrics. Runs fully
+in-process on regex + optional spaCy POS tagging (already an AEGIS dependency) --
+no Java runtime, no external grammar service, no new hard dependency. Also a
+compliance/quality signal, never part of `overall_risk`.
+
+### 14. Per-Venue Publisher Guideline Compliance (v3.0 -- novel)
+Runs the math and grammar findings above against **five publishing bodies'
+own sourced style guidance, checked SEPARATELY** rather than one generic merged
+rule set -- so a document that's fine by ACM's conventions but violates an
+IEEE-specific one (or vice versa) is visible per venue instead of averaged away:
+
+| Venue | Sourced from | Distinguishing rule this catches |
+|-------|--------------|-----------------------------------|
+| **IEEE** | IEEE Editorial Style Manual for Authors (2024) | American spelling, no contractions, "(n)" equation citation, serial comma |
+| **ACM** | ACM Formatting/Reference Guide (Chicago Manual of Style base) | American spelling, numeric-bracket citations, serial comma |
+| **BCS** | *The Computer Journal* (OUP) General Instructions | No contraction/spelling rule published -- reported as inferred, not asserted |
+| **IET** | IET Research Journals Author Guide | Bare `"(1)"` equation references (not `"Eq. (1)"`); scientific notation, not `5E03` |
+| **ISACA** | ISACA Journal Article Submission Guidelines | **Third person required** ("avoid 'I' or 'you'"); 2,000-3,000 word target; endnotes, not numeric brackets |
+
+Results are `PASS` / `NEEDS_REVIEW` / `NOT_ENOUGH_DATA` -- advisory, never `FAIL`.
+These are style conventions, not academic-integrity findings; AEGIS does not
+claim to be a venue's editorial desk. Run via `aegis guidelines paper.pdf --venues
+IEEE,ACM,BCS,IET,ISACA` (fast, no ML models at all) or opt in from `aegis analyze
+... --guidelines all`.
+
 ---
 
 ## Architecture
@@ -161,7 +208,7 @@ submission (PDF / DOCX / TEX / TXT)
   DocumentParser              -- PyMuPDF / python-docx / TexSoup / striprtf
        |
   ┌────┴──────────────────────────────────────────────────────────────┐
-  │  AEGISPipeline v2.5                                               │
+  │  AEGISPipeline v3.0                                               │
   │                                                                   │
   │  NGramDetector             word 3-gram + char 5-gram MinHash LSH  │
   │  SemanticDetector          SBERT + FAISS + CrossEncoder reranker  │
@@ -174,6 +221,9 @@ submission (PDF / DOCX / TEX / TXT)
   │  SemanticCoherenceAnalyzer[v2] discourse connectors; uniformity   │
   │  BatchAnalyzer         [v2] classroom-level essay mill detection  │
   │  TargetPublisherVerifier[v2.4] IEEE/ACM/Elsevier/IET/IETE/BCS     │
+  │  MathFormulaChecker    [v3.0] equation numbering/refs/notation    │
+  │  GrammarLanguageChecker[v3.0] contractions/spelling/agreement     │
+  │  GuidelineComplianceChecker[v3.0] IEEE/ACM/BCS/IET/ISACA, separate│
   └────────────────────────────┬──────────────────────────────────────┘
                                |
                           AnalysisReport
@@ -187,12 +237,13 @@ submission (PDF / DOCX / TEX / TXT)
 
 ## Installation
 
-**Minimal (no ML models -- citation, stylometric, watermark, coherence only):**
+**Minimal (no ML models -- citation, stylometric, watermark, coherence, math,
+grammar, and per-venue guideline compliance; all pure-Python):**
 ```bash
 pip install -e .
 ```
 
-**Full (all 11 detectors):**
+**Full (all 14 detectors):**
 ```bash
 pip install -e ".[ml,nlp,bib]"
 python -m spacy download en_core_web_sm
@@ -222,8 +273,15 @@ install.bat
 ### Command-line
 
 ```bash
-# Full analysis (all 10 detectors):
+# Full analysis (all 14 detectors):
 aegis analyze paper.pdf --output report.json --html report.html
+
+# Fast, offline-only scan: math + grammar + per-venue guideline compliance,
+# checked SEPARATELY for each requested venue -- no ML models at all:
+aegis guidelines paper.pdf --venues IEEE,ACM,BCS,IET,ISACA --html guidelines.html
+
+# Fold guideline compliance into the full analysis instead:
+aegis analyze paper.pdf --guidelines all --html report.html
 
 # Disable the experimental watermark heuristic entirely:
 aegis analyze paper.pdf --watermark-mode disabled
@@ -277,6 +335,12 @@ print(report.overall_risk)           # LOW | MEDIUM | HIGH | CRITICAL
 print(report.watermark_result)       # WatermarkResult
 print(report.citation_network_result)# CitationNetworkResult
 print(report.coherence_result)       # CoherenceResult
+
+# v3.0 new fields -- compliance/quality signals, never part of overall_risk
+print(report.math_result)            # MathAnalysisResult
+print(report.grammar_result)         # GrammarAnalysisResult
+print(report.guideline_results)      # {"IEEE": GuidelineComplianceResult, ...}
+                                      # (empty unless PipelineConfig.guideline_venues is set)
 
 from aegis.report.generator import ReportGenerator
 gen = ReportGenerator("./reports")
@@ -527,6 +591,30 @@ Website: [sunilgentyala.github.io/aegis-integrity](https://sunilgentyala.github.
 ---
 
 ## Changelog
+
+### v3.0.0 (August 2026)
+- **NEW:** Mathematical formula checking (`aegis.detectors.math_formula`).
+  Equation numbering (duplicates/gaps/out-of-order), dangling in-text
+  references to equations that don't exist, orphaned equations never
+  referenced, and notation conventions (exponential notation, decimal
+  leading zeros, percentage-range formatting) sourced from IEEE/IET style
+  manuals. Extracts equations from LaTeX source, from Word's native OMML
+  math XML (previously invisible to AEGIS entirely -- `python-docx`'s
+  `Paragraph.text` silently skips every `.docx` equation), or via
+  text-pattern heuristics for PDF/TXT. Pure Python, no ML dependency.
+- **NEW:** Grammar & language convention checking
+  (`aegis.detectors.grammar`). Contractions, US/UK spelling-consistency
+  detection across 30+ word pairs, subject/verb agreement heuristics,
+  common usage errors, and readability metrics -- fully offline via regex
+  + optional spaCy, no Java runtime or external grammar service required.
+- **NEW:** Per-venue publisher guideline compliance
+  (`aegis.guidelines`). Runs the math/grammar findings against IEEE, ACM,
+  BCS, IET, and ISACA's own sourced style guidance **separately** (not one
+  merged rule set) via `aegis guidelines <file> --venues ...` or `aegis
+  analyze ... --guidelines all`. Every rule cites its source; results are
+  advisory (`PASS`/`NEEDS_REVIEW`/`NOT_ENOUGH_DATA`), never `FAIL` --
+  these are style conventions, not misconduct findings, and are never
+  factored into `overall_risk`.
 
 ### v2.5.0 (August 2026)
 - **FIX (correctness, high severity):** Target-publisher keyword matching

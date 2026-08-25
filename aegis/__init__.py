@@ -14,10 +14,17 @@ in existing plagiarism detection tools:
   8. Structured JSON + HTML explainable reports (not black-box percentages)
   9. Target-publisher verification -- venue-claim and duplicate-submission
      checks scoped to IEEE, ACM, Elsevier, IET, IETE, and BCS via Crossref
+ 10. Mathematical formula checking -- equation numbering, dangling/orphaned
+     reference detection, and notation-convention checks (offline, no ML)
+ 11. Grammar & language convention checking -- contractions, US/UK spelling
+     consistency, subject/verb agreement, usage errors (offline, no ML)
+ 12. Per-venue publisher guideline compliance -- IEEE, ACM, BCS, IET, and
+     ISACA checked SEPARATELY against each body's own sourced style
+     guidance, not one generic merged rule set
 
 Authors: Sunil Gentyala, Rakesh Prakash, Akhila Kasturi
 License: MIT
 """
 
-__version__ = "2.5.0"
+__version__ = "3.0.0"
 __author__ = "Sunil Gentyala"
