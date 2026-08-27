@@ -12,6 +12,7 @@
 > **Open-source, offline, bias-aware academic integrity analysis.**
 > Documents are processed entirely on your own hardware and never uploaded anywhere. Citation checks may query Crossref/OpenAlex with reference metadata (titles, authors, DOIs) when online verification is enabled.
 > Analyzes plagiarism, AI-generated content, citation hallucinations, ghostwriting, predatory references, and essay mill patterns in a single pipeline -- plus an experimental token-distribution heuristic for LLM watermark research.
+> **Plagiarism detection is corpus-based, not a live web/database crawl:** AEGIS compares your document against a corpus of papers *you supply* (your own prior works, a downloaded reference set, etc. -- see [Building a Corpus Index](HOWTO.md#9-building-a-corpus-index)). With no corpus loaded, plagiarism modules correctly report "no prior works loaded" rather than silently finding nothing to flag -- that isn't a scan failure.
 > Results are a supporting signal for human review, not a determination of misconduct.
 
 ---
@@ -108,11 +109,13 @@ SBERT dense retrieval + CrossEncoder reranking catches concept-level paraphrase 
 no exact words are shared. Traditional BM25/TF-IDF-only tools miss this entirely.
 
 Model: `paraphrase-MiniLM-L6-v2` (80 MB, CPU-friendly). Index: FAISS `IndexFlatIP`.
+Requires a corpus you load first (`--corpus`) -- there is no built-in web/database
+crawl to compare against.
 
 ### 7. N-Gram Plagiarism (MinHash LSH)
 Dual index: word 3-gram (verbatim copy) and character 5-gram (obfuscation via typos
 or character substitution). 128 MinHash permutations; sub-linear query time over large
-corpora via LSH banding.
+corpora via LSH banding. Also requires a loaded corpus -- same scope note as above.
 
 ### 8. Stylometric Authorship Profiling (Burrows' Delta)
 60-dimensional feature vector per segment (10 scalar + 50 function-word dimensions).

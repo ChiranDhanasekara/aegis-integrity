@@ -30,7 +30,7 @@ print("="*70)
 # 1. Parse document
 # ---------------------------------------------------------------------------
 print("\n[1/5] Parsing document...")
-from aegis.core.document import DocumentParser
+from aegis.core.document import DocumentParser  # noqa: E402
 parser = DocumentParser()
 doc = parser.parse(TARGET)
 print(f"      Words : {len(doc.full_text.split()):,}")
@@ -42,7 +42,7 @@ print(f"      Abstract : {'yes' if doc.abstract else 'no'}")
 # 2. Stylometric analysis
 # ---------------------------------------------------------------------------
 print("\n[2/5] Running stylometric analysis...")
-from aegis.detectors.stylometric import StylometricAnalyzer
+from aegis.detectors.stylometric import StylometricAnalyzer  # noqa: E402
 stylo = StylometricAnalyzer(segment_size_words=300, change_threshold=0.40)
 sresult = stylo.analyze(doc.full_text)
 dp = sresult.document_profile
@@ -95,7 +95,7 @@ for w, freq in fw_pairs[:10]:
 # 3. AI content heuristics (no GPT-2)
 # ---------------------------------------------------------------------------
 print("\n[3/5] Running AI content heuristics (no GPT-2 -- stylometric signals only)...")
-from aegis.detectors.ai_detector import AIContentDetector, HEDGE_PHRASES
+from aegis.detectors.ai_detector import AIContentDetector, HEDGE_PHRASES  # noqa: E402
 det_ai = AIContentDetector()
 
 paragraphs = det_ai._split_paragraphs(doc.full_text, min_words=40)
@@ -138,7 +138,7 @@ sentences = [s for s in re.split(r"(?<=[.!?])\s+", doc.full_text)
 lengths = [len(s.split()) for s in sentences]
 if lengths:
     mean_l = sum(lengths) / len(lengths)
-    cv = (sum((l - mean_l)**2 for l in lengths) / len(lengths))**0.5 / max(mean_l, 1)
+    cv = (sum((x - mean_l)**2 for x in lengths) / len(lengths))**0.5 / max(mean_l, 1)
     print(f"      Sentence length CV      : {cv:.3f}")
     print("      (Human academic typical: 0.40-0.70; AI typical: <0.35)")
 
@@ -199,7 +199,7 @@ if not doc_refs:
             cite_key=doi.split("/")[-1][:20], line_number=None,
         ))
 
-from aegis.detectors.citation import CitationIntegrityDetector
+from aegis.detectors.citation import CitationIntegrityDetector  # noqa: E402
 cdet = CitationIntegrityDetector(
     email="sunil.gentyala@ieee.org",
     verify_timeout=10.0,
@@ -236,7 +236,7 @@ else:
 # 5. N-gram self-consistency check
 # ---------------------------------------------------------------------------
 print("\n[5/5] N-gram analysis (intra-document repetition)...")
-from aegis.detectors.ngram import NGramDetector
+from aegis.detectors.ngram import NGramDetector  # noqa: E402
 ngram = NGramDetector(word_n=3, char_n=5, word_threshold=0.40, char_threshold=0.55)
 
 # Split into sections and compare each against the others

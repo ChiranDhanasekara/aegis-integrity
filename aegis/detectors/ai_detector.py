@@ -267,18 +267,21 @@ class AIContentDetector:
         # far less densely in normal prose than single hedge words do.
         tell_score = min(tell_density / 3.0, 1.0)
 
-        # Ensemble (weighted average). tell_score gets a modest, fixed
-        # weight in both branches: it is a complementary lexical signal
-        # for modern (GPT-4/GPT-5-era) output that perplexity/burstiness
-        # under-detect, not a replacement for either -- see module
-        # docstring.
+        # Ensemble (weighted average). style_score + tell_score are weighted
+        # so that, together, they can independently clear ensemble_thresh
+        # (reach AI_LIKELY) even when ppl_score/burst_score are both 0 --
+        # the documented failure mode for GPT-4/GPT-5-era output (see module
+        # docstring: perplexity/burstiness alone under-detect this
+        # generation of models). Splitting the remaining weight across the
+        # GPT-2-era signals (ppl/burst/ratio) still lets them dominate for
+        # older/weaker AI text where they do fire reliably.
         if self.use_cross_ppl and self._obs_model:
-            ensemble = 0.25 * ppl_score + 0.15 * burst_score + \
-                       0.20 * ratio_score + 0.25 * style_score + \
-                       0.15 * tell_score
+            ensemble = 0.15 * ppl_score + 0.10 * burst_score + \
+                       0.10 * ratio_score + 0.40 * style_score + \
+                       0.25 * tell_score
         else:
-            ensemble = 0.35 * ppl_score + 0.25 * burst_score + \
-                       0.25 * style_score + 0.15 * tell_score
+            ensemble = 0.20 * ppl_score + 0.15 * burst_score + \
+                       0.40 * style_score + 0.25 * tell_score
 
         verdict = self._ensemble_verdict(ensemble, threshold)
 

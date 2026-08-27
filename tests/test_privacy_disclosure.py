@@ -5,7 +5,6 @@ checking contacts Crossref (and citation-network analysis contacts OpenAlex)
 by default. Reports must now say what was actually contacted for that run.
 """
 
-import pytest
 
 from aegis.core.pipeline import AEGISPipeline, PipelineConfig
 from aegis.report.generator import ReportGenerator
