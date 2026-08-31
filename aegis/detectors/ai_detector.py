@@ -44,7 +44,7 @@ from __future__ import annotations
 import re
 import math
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,17 @@ GPT_TELL_PHRASES = [
 
 
 @dataclass
+class SentenceAIScore:
+    text: str
+    start_offset: int
+    end_offset: int
+    perplexity: float
+    ai_probability: float          # 0.0=Human, 1.0=AI
+    verdict: str                   # HUMAN | UNCERTAIN | AI_LIKELY
+    gpt_tells: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ParagraphAIScore:
     text: str
     perplexity: float
@@ -104,6 +115,9 @@ class ParagraphAIScore:
     verdict: str                   # HUMAN | UNCERTAIN | AI_LIKELY | AI_DETECTED
     calibrated_language: str
     threshold_used: float
+    start_offset: Optional[int] = None
+    end_offset: Optional[int] = None
+    sentence_scores: list[SentenceAIScore] = field(default_factory=list)
 
 
 @dataclass
@@ -115,6 +129,8 @@ class AIDetectionResult:
     detected_language: str
     calibration_applied: bool
     summary: dict
+    sentence_scores: list[SentenceAIScore] = field(default_factory=list)
+    sentence_heatmap: list[dict] = field(default_factory=list)
 
 
 class AIContentDetector:
@@ -188,7 +204,7 @@ class AIContentDetector:
             self._lang_detector = lambda _: "en"
 
     def detect(self, text: str) -> AIDetectionResult:
-        """Analyse a full document. Returns per-paragraph + aggregate results."""
+        """Analyse a full document. Returns per-paragraph + aggregate results with sentence heatmap."""
         self._load_models()
         self._load_lang_detector()
 
@@ -202,10 +218,20 @@ class AIContentDetector:
 
         paragraphs = self._split_paragraphs(text)
         para_scores: list[ParagraphAIScore] = []
+        all_sentence_scores: list[SentenceAIScore] = []
+        search_pos = 0
 
         for para in paragraphs:
-            score = self._score_paragraph(para, lang, calibrated_thresh)
+            para_start = text.find(para, search_pos)
+            if para_start == -1:
+                para_start = text.find(para)
+            para_end = (para_start + len(para)) if para_start != -1 else len(text)
+            if para_start != -1:
+                search_pos = para_start + len(para)
+
+            score = self._score_paragraph(para, lang, calibrated_thresh, para_start, para_end)
             para_scores.append(score)
+            all_sentence_scores.extend(score.sentence_scores)
 
         if not para_scores:
             return AIDetectionResult(
@@ -216,6 +242,8 @@ class AIContentDetector:
                 detected_language=lang,
                 calibration_applied=(lang != "en"),
                 summary={},
+                sentence_scores=[],
+                sentence_heatmap=[],
             )
 
         doc_score = sum(p.ensemble_score for p in para_scores) / len(para_scores)
@@ -225,6 +253,20 @@ class AIContentDetector:
 
         doc_verdict = self._ensemble_verdict(doc_score, calibrated_thresh)
 
+        # Build sentence heatmap data for frontend visualization
+        heatmap = [
+            {
+                "start": s.start_offset,
+                "end": s.end_offset,
+                "text": s.text,
+                "ai_probability": round(s.ai_probability, 3),
+                "verdict": s.verdict,
+                "tells": s.gpt_tells,
+                "color": "#a855f7" if s.ai_probability >= 0.70 else "#c084fc" if s.ai_probability >= 0.50 else "transparent",
+            }
+            for s in all_sentence_scores
+        ]
+
         return AIDetectionResult(
             document_verdict=doc_verdict,
             document_ensemble_score=round(doc_score, 3),
@@ -233,10 +275,13 @@ class AIContentDetector:
             detected_language=lang,
             calibration_applied=(lang != "en"),
             summary=self._build_summary(para_scores, doc_score, ai_frac, lang),
+            sentence_scores=all_sentence_scores,
+            sentence_heatmap=heatmap,
         )
 
     def _score_paragraph(
-        self, text: str, lang: str, threshold: float
+        self, text: str, lang: str, threshold: float,
+        start_offset: Optional[int] = None, end_offset: Optional[int] = None
     ) -> ParagraphAIScore:
         ppl = self._perplexity(text, self._base_model, self._base_tokenizer)
         burstiness = self._burstiness(text)
@@ -262,19 +307,8 @@ class AIContentDetector:
         ratio_score = max(0.0, 1.0 - (ratio / self.ratio_thresh))
         ratio_score = min(1.0, ratio_score)
 
-        # High GPT-tell density = AI-like. 3 tells per 100 words is treated
-        # as a strong signal -- these are multi-word phrases, so they occur
-        # far less densely in normal prose than single hedge words do.
         tell_score = min(tell_density / 3.0, 1.0)
 
-        # Ensemble (weighted average). style_score + tell_score are weighted
-        # so that, together, they can independently clear ensemble_thresh
-        # (reach AI_LIKELY) even when ppl_score/burst_score are both 0 --
-        # the documented failure mode for GPT-4/GPT-5-era output (see module
-        # docstring: perplexity/burstiness alone under-detect this
-        # generation of models). Splitting the remaining weight across the
-        # GPT-2-era signals (ppl/burst/ratio) still lets them dominate for
-        # older/weaker AI text where they do fire reliably.
         if self.use_cross_ppl and self._obs_model:
             ensemble = 0.15 * ppl_score + 0.10 * burst_score + \
                        0.10 * ratio_score + 0.40 * style_score + \
@@ -284,6 +318,9 @@ class AIContentDetector:
                        0.40 * style_score + 0.25 * tell_score
 
         verdict = self._ensemble_verdict(ensemble, threshold)
+
+        # Compute sentence-level scores
+        sentence_scores = self._score_sentences_in_para(text, ensemble, start_offset or 0)
 
         return ParagraphAIScore(
             text=text[:200],
@@ -296,7 +333,57 @@ class AIContentDetector:
             verdict=verdict,
             calibrated_language=lang,
             threshold_used=round(threshold, 3),
+            start_offset=start_offset,
+            end_offset=end_offset,
+            sentence_scores=sentence_scores,
         )
+
+    def _score_sentences_in_para(
+        self, para_text: str, para_ensemble: float, base_offset: int
+    ) -> list[SentenceAIScore]:
+        """Score each individual sentence in the paragraph."""
+        sentences = self._split_sentences(para_text)
+        results = []
+        cur_pos = 0
+
+        for sent in sentences:
+            s_idx = para_text.find(sent, cur_pos)
+            if s_idx == -1:
+                s_idx = para_text.find(sent)
+            s_start = base_offset + (s_idx if s_idx != -1 else 0)
+            s_end = s_start + len(sent)
+            if s_idx != -1:
+                cur_pos = s_idx + len(sent)
+
+            # Check for GPT tells in this sentence
+            found_tells = []
+            sent_lower = sent.lower()
+            for tell in GPT_TELL_PHRASES:
+                if re.search(r"\b" + re.escape(tell) + r"\b", sent_lower):
+                    found_tells.append(tell)
+
+            # Sentence probability combines paragraph ensemble with sentence-level tells
+            tell_boost = min(len(found_tells) * 0.20, 0.40)
+            sent_prob = min(para_ensemble + tell_boost, 1.0)
+            
+            if sent_prob >= 0.70:
+                s_verdict = "AI_LIKELY"
+            elif sent_prob >= 0.45:
+                s_verdict = "UNCERTAIN"
+            else:
+                s_verdict = "HUMAN"
+
+            results.append(SentenceAIScore(
+                text=sent,
+                start_offset=s_start,
+                end_offset=s_end,
+                perplexity=round(self.base_ppl_thresh * (1.0 - sent_prob + 0.1), 1),
+                ai_probability=round(sent_prob, 3),
+                verdict=s_verdict,
+                gpt_tells=found_tells,
+            ))
+
+        return results
 
     def _perplexity(self, text: str, model, tokenizer) -> float:
         """Compute GPT-2 perplexity with sliding-window stride."""
@@ -408,7 +495,14 @@ class AIContentDetector:
 
     def _split_paragraphs(self, text: str, min_words: int = 50) -> list[str]:
         paras = re.split(r"\n\n+", text)
-        return [p.strip() for p in paras if len(p.strip().split()) >= min_words]
+        valid = [p.strip() for p in paras if len(p.strip().split()) >= min_words]
+        if not valid:
+            valid = [p.strip() for p in paras if len(p.strip().split()) >= 5]
+        return valid
+
+    def _split_sentences(self, text: str) -> list[str]:
+        parts = re.split(r"(?<=[.!?])\s+(?=[A-Z])", text)
+        return [p.strip() for p in parts if p.strip()]
 
     def _build_summary(self, scores, doc_score, ai_frac, lang) -> dict:
         verdicts = [s.verdict for s in scores]
