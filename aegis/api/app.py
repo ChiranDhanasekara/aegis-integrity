@@ -39,12 +39,17 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException, Query, Depends
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from aegis import __version__ as AEGIS_VERSION
 from aegis.core.pipeline import AEGISPipeline, PipelineConfig
 from aegis.corpus.indexer import CorpusIndexer
 from aegis.report.generator import ReportGenerator
+from aegis.writing.rewriter import AcademicRewriter
+from aegis.writing.clarity_scorer import ClarityScorer
+from aegis.writing.suggestion import SuggestionSet, WritingSuggestion
 
 logger = logging.getLogger(__name__)
 
@@ -365,3 +370,90 @@ async def batch(
 
     result = BatchAnalyzer().analyze(doc_names, doc_texts, ai_scores=ai_scores)
     return asdict(result)
+
+
+# ---------------------------------------------------------------------------
+# Writing Assistant & Web UI Routes (v4.0)
+# ---------------------------------------------------------------------------
+
+_rewriter_engine = AcademicRewriter()
+_clarity_engine = ClarityScorer()
+
+WEB_STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
+if WEB_STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(WEB_STATIC_DIR)), name="static")
+
+
+@app.get("/", response_class=HTMLResponse)
+def get_ui():
+    """Serve the interactive AEGIS web UI."""
+    index_file = WEB_STATIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return HTMLResponse("<h1>AEGIS Academic Platform API Running</h1>", status_code=200)
+
+
+class TextAnalysisPayload(BaseModel):
+    text: str
+
+
+class ApplyPayload(BaseModel):
+    text: str
+    accepted_ids: list[str]
+    suggestions: list[dict]
+
+
+@app.post("/api/writing/analyze")
+def api_analyze_writing(payload: TextAnalysisPayload):
+    """Run writing assistant and clarity scoring on plain text."""
+    if not payload.text.strip():
+        return {"suggestions": [], "clarity": None}
+
+    sug_set = _rewriter_engine.analyze(payload.text)
+    clarity = _clarity_engine.analyze(payload.text)
+
+    return {
+        "suggestions": [s.to_dict() for s in sug_set.all],
+        "summary": sug_set.summary,
+        "clarity": {
+            "overall_score": clarity.overall_clarity_score,
+            "fk_grade": clarity.avg_fk_grade,
+            "fog_index": clarity.avg_fog_index,
+            "avg_sentence_words": clarity.avg_sentence_words,
+            "total_sentences": clarity.total_sentences,
+            "coherence": round(
+                sum(p.overall_coherence for p in clarity.paragraph_coherence) /
+                max(len(clarity.paragraph_coherence), 1), 2
+            ) if clarity.paragraph_coherence else 0.8,
+        },
+    }
+
+
+@app.post("/api/writing/apply")
+def api_apply_suggestions(payload: ApplyPayload):
+    """Apply accepted suggestions to document text."""
+    sug_set = SuggestionSet()
+    accepted_ids = set(payload.accepted_ids)
+
+    for s_dict in payload.suggestions:
+        try:
+            sug = WritingSuggestion(
+                id=s_dict.get("id"),
+                category=s_dict.get("category", "grammar"),
+                severity=s_dict.get("severity", "info"),
+                original_text=s_dict.get("original_text", ""),
+                suggested_text=s_dict.get("suggested_text", ""),
+                explanation=s_dict.get("explanation", ""),
+                start_offset=s_dict.get("start_offset", 0),
+                end_offset=s_dict.get("end_offset", 0),
+                confidence=s_dict.get("confidence", 0.8),
+            )
+            if sug.id in accepted_ids:
+                sug.accept()
+            sug_set.add(sug)
+        except Exception:
+            continue
+
+    updated = sug_set.apply_to_text(payload.text)
+    return {"updated_text": updated}
+

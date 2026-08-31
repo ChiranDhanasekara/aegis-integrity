@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AEGIS — Academic Writing & Integrity Platform</title>
+  <meta name="description" content="State-of-the-art open-source academic writing assistant, similarity analyzer, citation verifier, and integrity platform.">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="bg-surface text-main antialiased selection:bg-brand-500 selection:text-white">
+  
+  <!-- App Container -->
+  <div id="app" class="flex flex-col min-h-screen">
+    
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-50 glass-header border-b border-border-subtle backdrop-blur-md">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        
+        <!-- Brand Logo -->
+        <div class="flex items-center gap-3 cursor-pointer" onclick="router.navigate('dashboard')">
+          <div class="logo-shield w-10 h-10 rounded-xl flex items-center justify-center shadow-glow">
+            <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-display font-extrabold text-xl tracking-tight text-gradient">AEGIS</span>
+              <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20">v4.0</span>
+            </div>
+            <p class="text-2xs text-muted font-medium">Academic Writing & Integrity</p>
+          </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="hidden md:flex items-center gap-1 bg-surface-raised/80 p-1.5 rounded-xl border border-border-subtle shadow-inner">
+          <button id="nav-dashboard" class="nav-link active" onclick="router.navigate('dashboard')">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+            <span>Dashboard</span>
+          </button>
+          <button id="nav-editor" class="nav-link" onclick="router.navigate('editor')">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+            <span>Writing Assistant</span>
+          </button>
+          <button id="nav-report" class="nav-link" onclick="router.navigate('report')">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>
+            <span>Integrity Report</span>
+          </button>
+          <button id="nav-settings" class="nav-link" onclick="router.navigate('settings')">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Settings</span>
+          </button>
+        </nav>
+
+        <!-- Right Action Controls -->
+        <div class="flex items-center gap-3">
+          <button id="theme-toggle" class="btn-icon" title="Toggle Theme" onclick="toggleTheme()">
+            <svg id="theme-icon-dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+            <svg id="theme-icon-light" class="w-5 h-5 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
+          
+          <button class="btn-primary" onclick="triggerFileUpload()">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+            <span>Upload Document</span>
+          </button>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- Hidden Global File Input -->
+    <input type="file" id="global-file-input" class="hidden" accept=".docx,.pdf,.txt,.md,.tex" onchange="handleFileSelected(event)">
+
+    <!-- Main Content Views Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+      
+      <!-- ============================================================ -->
+      <!-- VIEW 1: DASHBOARD                                            -->
+      <!-- ============================================================ -->
+      <section id="view-dashboard" class="view-section">
+        
+        <!-- Hero Upload Banner -->
+        <div class="glass-card p-8 rounded-2xl relative overflow-hidden mb-8 border border-border-subtle">
+          <div class="absolute -right-16 -bottom-16 w-80 h-80 bg-brand-500/10 rounded-full blur-3xl pointer-events-none"></div>
+          <div class="absolute -left-16 -top-16 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+          <div class="max-w-2xl">
+            <h1 class="text-3xl sm:text-4xl font-extrabold font-display tracking-tight text-main mb-3">
+              Elevate Your Academic Writing & Research Integrity
+            </h1>
+            <p class="text-muted text-base leading-relaxed mb-6">
+              AEGIS combines deep similarity detection, citation verification, rule-based academic writing assistance, and formatting checks into a single privacy-first workspace.
+            </p>
+          </div>
+
+          <!-- Dropzone Card -->
+          <div id="dropzone" class="dropzone-area mt-4 border-2 border-dashed border-border-strong rounded-2xl p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 hover:border-brand-500 hover:bg-brand-500/5" onclick="triggerFileUpload()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+            <div class="w-16 h-16 rounded-2xl bg-brand-500/10 text-brand-400 flex items-center justify-center mb-4 shadow-glow">
+              <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <path d="M12 12v6"/>
+                <path d="m15 15-3-3-3 3"/>
+              </svg>
+            </div>
+            <h3 class="font-display font-semibold text-lg text-main mb-1">Drag & drop your manuscript here</h3>
+            <p class="text-sm text-muted mb-4">Supports Word (.docx), PDF (.pdf), Markdown (.md), LaTeX (.tex), Text (.txt)</p>
+            <div class="flex items-center gap-3">
+              <button class="btn-secondary text-xs">Browse Local Files</button>
+              <button class="btn-ghost text-xs" onclick="event.stopPropagation(); loadSampleDocument()">Try Sample Paper</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Stats Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+          
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">Writing Assistant</span>
+              <span class="badge-accent">Offline</span>
+            </div>
+            <div class="text-2xl font-bold font-display text-main mb-1">35+ Rules</div>
+            <p class="text-xs text-muted">Wordiness, nominalizations, active voice & style consistency.</p>
+          </div>
+
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">Similarity Engine</span>
+              <span class="badge-blue">Multi-tier</span>
+            </div>
+            <div class="text-2xl font-bold font-display text-main mb-1">N-Gram + SBERT</div>
+            <p class="text-xs text-muted">Character shingles, MinHash LSH and dense neural embeddings.</p>
+          </div>
+
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">Open-Access Corpus</span>
+              <span class="badge-green">Live API</span>
+            </div>
+            <div class="text-2xl font-bold font-display text-main mb-1">200M+ Works</div>
+            <p class="text-xs text-muted">OpenAlex, Semantic Scholar, arXiv, and CORE integrations.</p>
+          </div>
+
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">Publisher Compliance</span>
+              <span class="badge-purple">Guidelines</span>
+            </div>
+            <div class="text-2xl font-bold font-display text-main mb-1">5 Standards</div>
+            <p class="text-xs text-muted">IEEE, ACM, Elsevier, IET, and BCS editorial criteria.</p>
+          </div>
+
+        </div>
+
+        <!-- Recent Analyses Table -->
+        <div class="glass-card rounded-2xl border border-border-subtle overflow-hidden">
+          <div class="p-5 border-b border-border-subtle flex items-center justify-between">
+            <div>
+              <h2 class="font-display font-bold text-lg text-main">Recent Analyses</h2>
+              <p class="text-xs text-muted">Documents analyzed in your current workspace</p>
+            </div>
+            <button class="btn-ghost text-xs" onclick="clearAnalysisHistory()">Clear History</button>
+          </div>
+          
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-surface-raised/50 text-xs font-semibold text-muted uppercase tracking-wider border-b border-border-subtle">
+                <tr>
+                  <th class="py-3 px-5">Document Name</th>
+                  <th class="py-3 px-5">Overall Risk</th>
+                  <th class="py-3 px-5">Similarity</th>
+                  <th class="py-3 px-5">Clarity Score</th>
+                  <th class="py-3 px-5">Suggestions</th>
+                  <th class="py-3 px-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="recent-analyses-tbody" class="divide-y divide-border-subtle text-muted">
+                <!-- Populated dynamically via JS -->
+                <tr>
+                  <td colspan="6" class="py-8 text-center text-muted">
+                    No documents analyzed yet. Upload a file above or click "Try Sample Paper" to start.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- VIEW 2: WRITING ASSISTANT & DOCUMENT EDITOR                   -->
+      <!-- ============================================================ -->
+      <section id="view-editor" class="view-section hidden">
+        
+        <!-- Editor Header Bar -->
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4 bg-surface-card p-4 rounded-xl border border-border-subtle">
+          <div class="flex items-center gap-3">
+            <span id="editor-doc-title" class="font-display font-bold text-base text-main">Untitled Document</span>
+            <span id="editor-format-badge" class="badge-accent">DOCX</span>
+          </div>
+
+          <!-- Document Stats Bar -->
+          <div class="flex items-center gap-4 text-xs font-medium text-muted">
+            <span id="stat-word-count">0 words</span>
+            <span>•</span>
+            <span id="stat-read-time">0 min read</span>
+            <span>•</span>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span id="stat-clarity-badge" class="font-semibold text-emerald-400">Clarity: 85/100</span>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-2">
+            <button class="btn-secondary text-xs" onclick="analyzeActiveEditorText()">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>
+              <span>Re-analyze</span>
+            </button>
+            <button class="btn-primary text-xs" onclick="applyAllAcceptedSuggestions()">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span>Apply Accepted</span>
+            </button>
+            <button class="btn-secondary text-xs" onclick="exportEditedDocx()">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              <span>Export DOCX</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Split Pane Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <!-- Left: Main Interactive Editor -->
+          <div class="lg:col-span-8 glass-card rounded-2xl border border-border-subtle p-6 flex flex-col min-h-[600px] shadow-sm">
+            <div class="flex items-center justify-between mb-3 pb-3 border-b border-border-subtle">
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">Manuscript Text</span>
+              <div class="flex items-center gap-2 text-2xs text-muted">
+                <span class="w-2 h-2 rounded-full bg-blue-500"></span> Wordiness
+                <span class="w-2 h-2 rounded-full bg-amber-500 ml-2"></span> Grammar
+                <span class="w-2 h-2 rounded-full bg-emerald-500 ml-2"></span> Nominalization
+                <span class="w-2 h-2 rounded-full bg-purple-500 ml-2"></span> Style
+              </div>
+            </div>
+
+            <!-- Editable Content Area with Synchronized Highlight Layer -->
+            <div class="relative flex-1 font-mono text-sm leading-relaxed">
+              <div id="editor-highlight-layer" class="editor-highlight-layer absolute inset-0 pointer-events-none p-4 whitespace-pre-wrap break-words overflow-hidden text-transparent"></div>
+              <textarea id="manuscript-editor" class="w-full h-full min-h-[500px] p-4 bg-transparent resize-y rounded-xl focus:outline-none border border-transparent focus:border-brand-500/30 text-main placeholder-muted leading-relaxed font-sans text-base" placeholder="Paste your academic text or upload a document to begin writing assistance..." oninput="handleEditorInput()"></textarea>
+            </div>
+          </div>
+
+          <!-- Right: Writing Assistant Sidebar -->
+          <div class="lg:col-span-4 flex flex-col gap-4">
+            
+            <!-- Clarity Gauge & Overview Card -->
+            <div class="glass-card p-5 rounded-2xl border border-border-subtle">
+              <div class="flex items-center justify-between mb-4">
+                <h3 class="font-display font-bold text-sm text-main">Clarity & Readability</h3>
+                <span id="clarity-score-num" class="text-xl font-extrabold text-gradient">88/100</span>
+              </div>
+              
+              <div class="space-y-3">
+                <div>
+                  <div class="flex justify-between text-2xs font-medium text-muted mb-1">
+                    <span>Flesch-Kincaid Grade</span>
+                    <span id="stat-fk-grade" class="text-main font-semibold">13.2 (Target: 12–16)</span>
+                  </div>
+                  <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                    <div id="bar-fk" class="h-full bg-blue-500 rounded-full" style="width: 70%"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex justify-between text-2xs font-medium text-muted mb-1">
+                    <span>Gunning Fog Index</span>
+                    <span id="stat-fog-index" class="text-main font-semibold">14.1</span>
+                  </div>
+                  <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                    <div id="bar-fog" class="h-full bg-indigo-500 rounded-full" style="width: 65%"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex justify-between text-2xs font-medium text-muted mb-1">
+                    <span>Paragraph Coherence</span>
+                    <span id="stat-coherence" class="text-main font-semibold">0.82 / 1.0</span>
+                  </div>
+                  <div class="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden">
+                    <div id="bar-coherence" class="h-full bg-emerald-500 rounded-full" style="width: 82%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Suggestions List Card -->
+            <div class="glass-card rounded-2xl border border-border-subtle flex flex-col max-h-[600px] overflow-hidden">
+              <div class="p-4 border-b border-border-subtle flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <h3 class="font-display font-bold text-sm text-main">Suggestions</h3>
+                  <span id="suggestions-count-badge" class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-brand-500/10 text-brand-400">0</span>
+                </div>
+                <button class="text-xs text-brand-400 hover:text-brand-300 font-medium" onclick="acceptAllVisibleSuggestions()">Accept All</button>
+              </div>
+
+              <!-- Filter Pills -->
+              <div class="px-4 py-2 bg-surface-raised/40 border-b border-border-subtle flex items-center gap-1.5 overflow-x-auto text-2xs">
+                <button class="filter-pill active" onclick="filterSuggestions('all')">All</button>
+                <button class="filter-pill" onclick="filterSuggestions('wordiness')">Wordiness</button>
+                <button class="filter-pill" onclick="filterSuggestions('grammar')">Grammar</button>
+                <button class="filter-pill" onclick="filterSuggestions('nominalization')">Nominalizations</button>
+                <button class="filter-pill" onclick="filterSuggestions('style')">Style</button>
+                <button class="filter-pill" onclick="filterSuggestions('spelling')">Spelling</button>
+              </div>
+
+              <!-- Scrollable Cards Container -->
+              <div id="suggestions-container" class="p-4 overflow-y-auto space-y-3 flex-1 divide-y divide-border-subtle">
+                <div class="text-center py-10 text-xs text-muted">
+                  No suggestions yet. Run analysis to receive actionable writing suggestions.
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- VIEW 3: INTEGRITY & SIMILARITY REPORT (Turnitin-style)        -->
+      <!-- ============================================================ -->
+      <section id="view-report" class="view-section hidden">
+        
+        <!-- Report Header Banner -->
+        <div class="glass-card p-6 rounded-2xl border border-border-subtle mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-3 mb-1">
+              <h1 id="report-doc-name" class="font-display font-extrabold text-2xl text-main">Academic Integrity & Similarity Report</h1>
+              <span id="report-risk-badge" class="risk-badge-low">LOW RISK</span>
+            </div>
+            <p id="report-meta-line" class="text-xs text-muted">Generated by AEGIS v4.0 Pipeline • Multi-corpus indexed</p>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button class="btn-secondary text-xs" onclick="downloadHtmlReport()">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              <span>Download HTML</span>
+            </button>
+            <button class="btn-primary text-xs" onclick="router.navigate('editor')">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+              <span>Open in Editor</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Executive Metrics Cards Grid -->
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+          
+          <div class="glass-card p-4 rounded-xl border border-border-subtle text-center">
+            <span class="text-2xs font-semibold uppercase tracking-wider text-muted">Similarity Score</span>
+            <div id="score-similarity" class="text-2xl font-extrabold text-blue-400 my-1">0.0%</div>
+            <p class="text-2xs text-muted">Matched passages</p>
+          </div>
+
+          <div class="glass-card p-4 rounded-xl border border-border-subtle text-center">
+            <span class="text-2xs font-semibold uppercase tracking-wider text-muted">AI Detection</span>
+            <div id="score-ai" class="text-2xl font-extrabold text-purple-400 my-1">0.00</div>
+            <p id="score-ai-verdict" class="text-2xs text-muted">HUMAN_WRITTEN</p>
+          </div>
+
+          <div class="glass-card p-4 rounded-xl border border-border-subtle text-center">
+            <span class="text-2xs font-semibold uppercase tracking-wider text-muted">Citations</span>
+            <div id="score-citations" class="text-2xl font-extrabold text-emerald-400 my-1">100%</div>
+            <p id="score-citations-verdict" class="text-2xs text-muted">Verified Crossref</p>
+          </div>
+
+          <div class="glass-card p-4 rounded-xl border border-border-subtle text-center">
+            <span class="text-2xs font-semibold uppercase tracking-wider text-muted">Style Inconsistency</span>
+            <div id="score-style" class="text-2xl font-extrabold text-amber-400 my-1">0.00</div>
+            <p class="text-2xs text-muted">Intra-author delta</p>
+          </div>
+
+          <div class="glass-card p-4 rounded-xl border border-border-subtle text-center col-span-2 lg:col-span-1">
+            <span class="text-2xs font-semibold uppercase tracking-wider text-muted">Publisher Guidelines</span>
+            <div id="score-guidelines" class="text-2xl font-extrabold text-emerald-400 my-1">PASS</div>
+            <p class="text-2xs text-muted">IEEE / ACM format</p>
+          </div>
+
+        </div>
+
+        <!-- Interactive Split View: Document Highlight Viewer & Sources Sidebar -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          <!-- Highlighted Document Viewer -->
+          <div class="lg:col-span-8 glass-card rounded-2xl border border-border-subtle p-6 flex flex-col min-h-[600px]">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-border-subtle">
+              <span class="text-xs font-semibold uppercase tracking-wider text-muted">Annotated Document View</span>
+              <div class="flex items-center gap-3 text-2xs">
+                <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> Verbatim</span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span> Paraphrase</span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-yellow-500"></span> Semantic</span>
+                <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span> AI Synthesized</span>
+              </div>
+            </div>
+
+            <!-- Formatted Document Viewer -->
+            <div id="report-document-body" class="prose max-w-none text-main leading-relaxed font-sans text-sm space-y-4 flex-1">
+              <p class="text-muted text-center py-16">No document loaded. Run an analysis to inspect similarity annotations.</p>
+            </div>
+          </div>
+
+          <!-- Matched Sources & Deep-Dives Sidebar -->
+          <div class="lg:col-span-4 flex flex-col gap-4">
+            
+            <div class="glass-card rounded-2xl border border-border-subtle p-5">
+              <h3 class="font-display font-bold text-sm text-main mb-3 flex items-center justify-between">
+                <span>Matched Sources</span>
+                <span id="sources-count-badge" class="badge-blue">0 Sources</span>
+              </h3>
+              
+              <div id="report-sources-list" class="space-y-3 max-h-[500px] overflow-y-auto">
+                <p class="text-xs text-muted text-center py-8">No overlapping external sources detected.</p>
+              </div>
+            </div>
+
+            <!-- Deep Dive Accordion (AI, Citations, Style) -->
+            <div class="glass-card rounded-2xl border border-border-subtle p-5">
+              <h3 class="font-display font-bold text-sm text-main mb-3">Integrity Deep Dives</h3>
+              
+              <div class="space-y-2 text-xs">
+                <details class="deep-dive-card rounded-xl p-3 bg-surface-raised/40">
+                  <summary class="font-semibold text-main cursor-pointer flex justify-between">
+                    <span>AI Writing Breakdown</span>
+                    <span id="summary-ai-stat" class="text-muted">Perplexity 62.4</span>
+                  </summary>
+                  <div class="mt-3 text-muted space-y-1 text-2xs pt-2 border-t border-border-subtle">
+                    <p>Base Perplexity: <span id="dd-ai-ppl" class="text-main">--</span></p>
+                    <p>Burstiness: <span id="dd-ai-burst" class="text-main">--</span></p>
+                    <p>Flagged Paragraphs: <span id="dd-ai-frac" class="text-main">0%</span></p>
+                  </div>
+                </details>
+
+                <details class="deep-dive-card rounded-xl p-3 bg-surface-raised/40">
+                  <summary class="font-semibold text-main cursor-pointer flex justify-between">
+                    <span>Citation Verification</span>
+                    <span id="summary-cit-stat" class="text-muted">0 Flagged</span>
+                  </summary>
+                  <div id="dd-citations-list" class="mt-3 text-muted space-y-2 text-2xs pt-2 border-t border-border-subtle">
+                    <p>All references verified via Crossref & OpenAlex.</p>
+                  </div>
+                </details>
+
+                <details class="deep-dive-card rounded-xl p-3 bg-surface-raised/40">
+                  <summary class="font-semibold text-main cursor-pointer flex justify-between">
+                    <span>Language & Conventions</span>
+                    <span id="summary-lang-stat" class="text-muted">Consistent</span>
+                  </summary>
+                  <div class="mt-3 text-muted space-y-1 text-2xs pt-2 border-t border-border-subtle">
+                    <p>Spelling Variant: <span id="dd-spelling" class="text-main">US English</span></p>
+                    <p>Contractions: <span id="dd-contractions" class="text-main">0</span></p>
+                    <p>Mathematical Formulae: <span id="dd-math" class="text-main">3 verified (OMML)</span></p>
+                  </div>
+                </details>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- VIEW 4: SETTINGS & CONFIGURATION                             -->
+      <!-- ============================================================ -->
+      <section id="view-settings" class="view-section hidden">
+        
+        <div class="max-w-3xl mx-auto space-y-6">
+          
+          <div class="glass-card p-6 rounded-2xl border border-border-subtle">
+            <h2 class="font-display font-bold text-lg text-main mb-1">Platform Settings</h2>
+            <p class="text-xs text-muted mb-6">Customize detection thresholds and open-access corpus connectors</p>
+
+            <div class="space-y-6">
+              
+              <!-- Spelling Preference -->
+              <div class="flex items-center justify-between pb-4 border-b border-border-subtle">
+                <div>
+                  <label class="font-semibold text-sm text-main">Spelling Convention</label>
+                  <p class="text-xs text-muted">Target consistency style for writing suggestions</p>
+                </div>
+                <select id="setting-spelling" class="select-input" onchange="saveSettings()">
+                  <option value="auto">Auto-Detect Dominant</option>
+                  <option value="US">American English (US)</option>
+                  <option value="UK">British English (UK)</option>
+                </select>
+              </div>
+
+              <!-- Max Sentence Length -->
+              <div class="flex items-center justify-between pb-4 border-b border-border-subtle">
+                <div>
+                  <label class="font-semibold text-sm text-main">Sentence Length Threshold</label>
+                  <p class="text-xs text-muted">Flag sentences exceeding this word count for splitting</p>
+                </div>
+                <div class="flex items-center gap-3">
+                  <input type="number" id="setting-max-words" class="number-input" value="45" min="25" max="80" onchange="saveSettings()">
+                  <span class="text-xs text-muted">words</span>
+                </div>
+              </div>
+
+              <!-- Open-Access Corpus Sources -->
+              <div class="pb-4 border-b border-border-subtle">
+                <label class="font-semibold text-sm text-main block mb-2">Scholarly Open-Access Connectors</label>
+                <p class="text-xs text-muted mb-4">Query free academic databases via extracted key phrases (privacy-first)</p>
+                
+                <div class="space-y-3">
+                  <label class="flex items-center gap-3 text-xs text-main cursor-pointer">
+                    <input type="checkbox" id="setting-openalex" class="checkbox-input" checked onchange="saveSettings()">
+                    <span><strong>OpenAlex API</strong> (200M+ works, free, fast)</span>
+                  </label>
+                  <label class="flex items-center gap-3 text-xs text-main cursor-pointer">
+                    <input type="checkbox" id="setting-s2" class="checkbox-input" checked onchange="saveSettings()">
+                    <span><strong>Semantic Scholar API</strong> (Semantic vector abstracts)</span>
+                  </label>
+                  <label class="flex items-center gap-3 text-xs text-main cursor-pointer">
+                    <input type="checkbox" id="setting-arxiv" class="checkbox-input" checked onchange="saveSettings()">
+                    <span><strong>arXiv API</strong> (STEM preprints & papers)</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Privacy Notice -->
+              <div class="p-4 rounded-xl bg-brand-500/5 border border-brand-500/20 text-xs text-muted leading-relaxed">
+                <div class="flex items-center gap-2 font-semibold text-brand-400 mb-1">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  <span>Academic Privacy Guarantee</span>
+                </div>
+                Your full manuscript text is <strong>never uploaded to external cloud APIs</strong>. Writing suggestions and clarity scoring run 100% locally and offline. External scholarly queries only send generic extracted bigrams.
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Source Comparison Modal -->
+    <div id="source-modal" class="modal-backdrop hidden" onclick="closeSourceModal()">
+      <div class="modal-card" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between p-5 border-b border-border-subtle">
+          <div>
+            <h3 id="modal-source-title" class="font-display font-bold text-base text-main">Source Match Detail</h3>
+            <p id="modal-source-meta" class="text-xs text-muted">Comparison between submission and retrieved work</p>
+          </div>
+          <button class="btn-icon" onclick="closeSourceModal()">✕</button>
+        </div>
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+          <div class="p-4 rounded-xl bg-surface-raised/60 border border-border-subtle">
+            <span class="font-semibold text-main uppercase tracking-wider text-2xs block mb-2">Submission Excerpt</span>
+            <div id="modal-query-excerpt" class="leading-relaxed text-muted font-mono"></div>
+          </div>
+          <div class="p-4 rounded-xl bg-brand-500/5 border border-brand-500/20">
+            <span class="font-semibold text-brand-400 uppercase tracking-wider text-2xs block mb-2">Matched Source Text</span>
+            <div id="modal-source-excerpt" class="leading-relaxed text-muted font-mono"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  </div>
+
+  <!-- App Logic -->
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
