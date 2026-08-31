@@ -50,6 +50,9 @@ from aegis.report.generator import ReportGenerator
 from aegis.writing.rewriter import AcademicRewriter
 from aegis.writing.clarity_scorer import ClarityScorer
 from aegis.writing.suggestion import SuggestionSet, WritingSuggestion
+from aegis.export.docx_editor import DocxEditor
+from aegis.export.docx_tracked_changes import DocxTrackedChangesExporter
+from aegis.export.pdf_exporter import PDFReportExporter
 
 logger = logging.getLogger(__name__)
 
@@ -456,4 +459,119 @@ def api_apply_suggestions(payload: ApplyPayload):
 
     updated = sug_set.apply_to_text(payload.text)
     return {"updated_text": updated}
+
+
+class ExportDocxPayload(BaseModel):
+    text: str
+    doc_title: Optional[str] = "manuscript_edited.docx"
+    tracked_changes: Optional[bool] = True
+    accepted_ids: Optional[list[str]] = None
+    suggestions: Optional[list[dict]] = None
+
+
+class ExportPdfPayload(BaseModel):
+    doc_title: Optional[str] = "Academic Integrity Report"
+    text: Optional[str] = ""
+    overall_risk: Optional[str] = "LOW"
+    suggestions: Optional[list[dict]] = None
+    clarity: Optional[dict] = None
+
+
+@app.post("/api/export/docx")
+def api_export_docx(payload: ExportDocxPayload):
+    """Export document as DOCX with revisions / tracked changes."""
+    tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+    tmp_out.close()
+
+    try:
+        if payload.tracked_changes and payload.suggestions:
+            exporter = DocxTrackedChangesExporter(author="AEGIS Writing Assistant")
+            # Build initial doc with base paragraphs
+            for para in payload.text.split("\n\n"):
+                if para.strip():
+                    exporter.document.add_paragraph(para.strip())
+            
+            # Apply tracked suggestions
+            sug_list = []
+            accepted_set = set(payload.accepted_ids or [])
+            for s_dict in payload.suggestions:
+                try:
+                    sug = WritingSuggestion(
+                        id=s_dict.get("id"),
+                        category=s_dict.get("category", "grammar"),
+                        severity=s_dict.get("severity", "info"),
+                        original_text=s_dict.get("original_text", ""),
+                        suggested_text=s_dict.get("suggested_text", ""),
+                        explanation=s_dict.get("explanation", ""),
+                        start_offset=s_dict.get("start_offset", 0),
+                        end_offset=s_dict.get("end_offset", 0),
+                        confidence=s_dict.get("confidence", 0.8),
+                    )
+                    if sug.id in accepted_set:
+                        sug.accept()
+                    sug_list.append(sug)
+                except Exception:
+                    continue
+            exporter.apply_tracked_suggestions(sug_list)
+            exporter.save(tmp_out.name)
+        else:
+            editor = DocxEditor()
+            for para in payload.text.split("\n\n"):
+                if para.strip():
+                    editor.document.add_paragraph(para.strip())
+            editor.save(tmp_out.name)
+
+        return FileResponse(
+            tmp_out.name,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=payload.doc_title,
+        )
+    except Exception as exc:
+        logger.warning("DOCX export failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"DOCX export error: {exc}")
+
+
+@app.post("/api/export/pdf")
+def api_export_pdf(payload: ExportPdfPayload):
+    """Generate and return standalone executive PDF report."""
+    tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    tmp_out.close()
+
+    try:
+        pdf_exporter = PDFReportExporter()
+        sug_list = []
+        if payload.suggestions:
+            for s_dict in payload.suggestions:
+                try:
+                    sug_list.append(WritingSuggestion(
+                        id=s_dict.get("id"),
+                        category=s_dict.get("category", "grammar"),
+                        severity=s_dict.get("severity", "info"),
+                        original_text=s_dict.get("original_text", ""),
+                        suggested_text=s_dict.get("suggested_text", ""),
+                        explanation=s_dict.get("explanation", ""),
+                        start_offset=s_dict.get("start_offset", 0),
+                        end_offset=s_dict.get("end_offset", 0),
+                        confidence=s_dict.get("confidence", 0.8),
+                    ))
+                except Exception:
+                    continue
+
+        pdf_exporter.generate_report(
+            output_path=tmp_out.name,
+            doc_title=payload.doc_title,
+            suggestions=sug_list,
+            clarity_report=payload.clarity,
+            overall_risk=payload.overall_risk,
+        )
+
+        return FileResponse(
+            tmp_out.name,
+            media_type="application/pdf",
+            filename="aegis_integrity_report.pdf",
+        )
+    except Exception as exc:
+        logger.warning("PDF export failed: %s", exc)
+        raise HTTPException(status_code=500, detail=f"PDF export error: {exc}")
+
 
