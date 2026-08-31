@@ -51,6 +51,11 @@ from aegis.detectors.publisher_registry import DEFAULT_TARGET_PUBLISHERS
 from aegis.detectors.math_formula import MathFormulaChecker, MathAnalysisResult
 from aegis.detectors.grammar import GrammarLanguageChecker, GrammarAnalysisResult
 from aegis.guidelines.checker import GuidelineComplianceChecker, GuidelineComplianceResult
+from aegis.detectors.similarity_report import (
+    SimilarityReportGenerator, SimilarityReport)
+from aegis.writing.suggestion import SuggestionSet
+from aegis.writing.rewriter import AcademicRewriter
+from aegis.writing.clarity_scorer import ClarityScorer, ClarityReport
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +144,11 @@ class PipelineConfig:
     run_math_check: bool = True
     run_grammar_check: bool = True
 
+    # Writing assistant & similarity report (v4.0)
+    run_similarity_report: bool = True
+    run_writing_assistant: bool = True
+    run_clarity_scorer: bool = True
+
 
 @dataclass
 class AnalysisReport:
@@ -168,6 +178,11 @@ class AnalysisReport:
     math_result: Optional[MathAnalysisResult] = None
     grammar_result: Optional[GrammarAnalysisResult] = None
     guideline_results: dict[str, GuidelineComplianceResult] = field(default_factory=dict)
+
+    # v4.0 results -- writing assistance & unified similarity report
+    similarity_report: Optional[SimilarityReport] = None
+    writing_suggestions: Optional[SuggestionSet] = None
+    clarity_report: Optional[ClarityReport] = None
 
     # Aggregate risk scores (0.0 - 1.0)
     plagiarism_score: float = 0.0    # combined n-gram + semantic
@@ -284,6 +299,20 @@ class AEGISPipeline:
             use_spacy=self.cfg.grammar_use_spacy,
             long_sentence_words=self.cfg.grammar_long_sentence_words,
         ) if self.cfg.run_grammar_check else None
+
+        # v4.0 writing assistant & unified similarity report
+        self._similarity_report_gen = (
+            SimilarityReportGenerator()
+            if self.cfg.run_similarity_report else None
+        )
+        self._rewriter = (
+            AcademicRewriter()
+            if self.cfg.run_writing_assistant else None
+        )
+        self._clarity_scorer = (
+            ClarityScorer()
+            if self.cfg.run_clarity_scorer else None
+        )
 
         self._corpus_loaded = False
 
@@ -552,7 +581,53 @@ class AEGISPipeline:
                 logger.warning("Guideline compliance check failed: %s", exc)
                 _status("guideline_compliance", "failed", str(exc))
 
-        # 15. Overall risk and flags
+        # 15. Unified similarity report (v4.0)
+        if not self._similarity_report_gen:
+            _status("similarity_report", "disabled")
+        else:
+            logger.info("Generating unified similarity report...")
+            try:
+                report.similarity_report = self._similarity_report_gen.generate(
+                    body_text=parsed.body_text,
+                    submission_path=str(submission_path),
+                    ngram_matches=report.ngram_matches,
+                    semantic_matches=report.semantic_matches,
+                    self_plagiarism_result=report.self_plagiarism_result,
+                )
+                _status("similarity_report", "completed")
+            except Exception as exc:
+                logger.warning("Similarity report generation failed: %s", exc)
+                _status("similarity_report", "failed", str(exc))
+
+        # 16. Writing suggestions (v4.0)
+        if not self._rewriter:
+            _status("writing_assistant", "disabled")
+        else:
+            logger.info("Running writing assistant...")
+            try:
+                suggestions = self._rewriter.analyze(parsed.body_text)
+                if report.grammar_result:
+                    grammar_sug = report.grammar_result.to_suggestions(parsed.body_text)
+                    suggestions.add_all(grammar_sug)
+                report.writing_suggestions = suggestions
+                _status("writing_assistant", "completed")
+            except Exception as exc:
+                logger.warning("Writing assistant analysis failed: %s", exc)
+                _status("writing_assistant", "failed", str(exc))
+
+        # 17. Clarity scoring (v4.0)
+        if not self._clarity_scorer:
+            _status("clarity_scorer", "disabled")
+        else:
+            logger.info("Running clarity scorer...")
+            try:
+                report.clarity_report = self._clarity_scorer.analyze(parsed.body_text)
+                _status("clarity_scorer", "completed")
+            except Exception as exc:
+                logger.warning("Clarity scorer failed: %s", exc)
+                _status("clarity_scorer", "failed", str(exc))
+
+        # 18. Overall risk and flags
         report.overall_risk, report.flags = self._assess_overall_risk(report)
         report.elapsed_seconds = round(time.time() - t0, 2)
 

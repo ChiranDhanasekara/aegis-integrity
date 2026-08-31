@@ -27,6 +27,7 @@ class NGramMatch:
     jaccard_estimate: float
     match_type: str          # "word_ngram" | "char_ngram"
     char_offset_query: Optional[int] = None
+    char_offset_end: Optional[int] = None
 
 
 class NGramDetector:
@@ -104,8 +105,16 @@ class NGramDetector:
 
         results: list[NGramMatch] = []
         paragraphs = self._split_paragraphs(query_text)
+        search_pos = 0
 
         for para in paragraphs:
+            para_start = query_text.find(para, search_pos)
+            if para_start == -1:
+                para_start = query_text.find(para)
+            para_end = (para_start + len(para)) if para_start != -1 else None
+            if para_start != -1:
+                search_pos = para_start + len(para)
+
             if len(para.split()) < min_segment_words:
                 continue
 
@@ -123,6 +132,8 @@ class NGramDetector:
                     source_segment=src_para[:400],
                     jaccard_estimate=round(j, 3),
                     match_type="word_ngram",
+                    char_offset_query=para_start if para_start != -1 else None,
+                    char_offset_end=para_end,
                 ))
 
             # Character 5-gram candidates
@@ -138,6 +149,8 @@ class NGramDetector:
                     source_segment=src_para[:400],
                     jaccard_estimate=round(j, 3),
                     match_type="char_ngram",
+                    char_offset_query=para_start if para_start != -1 else None,
+                    char_offset_end=para_end,
                 ))
 
         results.sort(key=lambda x: x.jaccard_estimate, reverse=True)

@@ -23,6 +23,8 @@ class SemanticMatch:
     cosine_score: float
     rerank_score: Optional[float]   # cross-encoder score (None if not computed)
     is_paraphrase: bool
+    char_offset_query: Optional[int] = None
+    char_offset_end: Optional[int] = None
 
 
 class SemanticDetector:
@@ -117,6 +119,10 @@ class SemanticDetector:
 
         results: list[SemanticMatch] = []
         for qi, (score_row, idx_row) in enumerate(zip(scores, indices)):
+            q_sent = query_sentences[qi]
+            q_start = query_text.find(q_sent)
+            q_end = (q_start + len(q_sent)) if q_start != -1 else None
+
             for score, idx in zip(score_row, idx_row):
                 if idx < 0 or score < self.cosine_threshold:
                     continue
@@ -125,7 +131,7 @@ class SemanticDetector:
                 rerank_score = None
                 if self._reranker:
                     rs = self._reranker.predict(
-                        [(query_sentences[qi], src_sent)])
+                        [(q_sent, src_sent)])
                     rerank_score = float(rs[0])
 
                 is_para = (score >= self.cosine_threshold and
@@ -133,12 +139,14 @@ class SemanticDetector:
                             rerank_score >= self.rerank_threshold))
 
                 results.append(SemanticMatch(
-                    query_sentence=query_sentences[qi],
+                    query_sentence=q_sent,
                     source_label=label,
                     source_sentence=src_sent,
                     cosine_score=round(float(score), 3),
                     rerank_score=round(rerank_score, 3) if rerank_score else None,
                     is_paraphrase=is_para,
+                    char_offset_query=q_start if q_start != -1 else None,
+                    char_offset_end=q_end,
                 ))
 
         results.sort(key=lambda x: x.cosine_score, reverse=True)

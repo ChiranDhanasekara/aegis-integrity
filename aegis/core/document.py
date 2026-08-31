@@ -104,22 +104,50 @@ class DocumentParser:
         )
 
     def _parse_docx(self, path: Path) -> ParsedDocument:
+        paras = []
+        table_text = ""
         try:
             from docx import Document
-        except ImportError:
-            raise ImportError("python-docx required: pip install python-docx")
+            doc = Document(str(path))
+            paras = [p.text for p in doc.paragraphs if p.text.strip()]
+            table_text = self._extract_docx_table_text(doc)
+        except Exception:
+            # Fallback to standard library zipfile + xml.etree.ElementTree
+            # (useful when python-docx or lxml C-extensions are blocked or unavailable)
+            import zipfile
+            import xml.etree.ElementTree as ET
+            with zipfile.ZipFile(str(path)) as z:
+                xml_content = z.read("word/document.xml")
+                tree = ET.fromstring(xml_content)
+                w_ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+                for p in tree.iter(f"{{{w_ns}}}p"):
+                    texts = [
+                        node.text
+                        for node in p.iter(f"{{{w_ns}}}t")
+                        if node.text
+                    ]
+                    p_str = "".join(texts).strip()
+                    if p_str:
+                        paras.append(p_str)
+                # Also extract table text
+                table_blocks = []
+                for tbl in tree.iter(f"{{{w_ns}}}tbl"):
+                    for tr in tbl.iter(f"{{{w_ns}}}tr"):
+                        row_cells = []
+                        for tc in tr.iter(f"{{{w_ns}}}tc"):
+                            cell_text = "".join(
+                                node.text
+                                for node in tc.iter(f"{{{w_ns}}}t")
+                                if node.text
+                            ).strip()
+                            if cell_text:
+                                row_cells.append(cell_text)
+                        if row_cells:
+                            table_blocks.append(" | ".join(row_cells))
+                if table_blocks:
+                    table_text = "\n".join(table_blocks)
 
-        doc = Document(str(path))
-        paras = [p.text for p in doc.paragraphs if p.text.strip()]
-        # Double newline, not single: downstream paragraph-level detectors
-        # (AIContentDetector, NGramDetector) split on "\n\n+" to find paragraph
-        # boundaries. A single-newline join leaves no blank lines anywhere in
-        # the text, so the entire document collapses into one "paragraph" and
-        # paragraph-level AI/n-gram detection silently degrades to
-        # document-level for every DOCX submission.
         full_text = "\n\n".join(paras)
-
-        table_text = self._extract_docx_table_text(doc)
         if table_text:
             full_text = full_text + "\n\n" + table_text
 

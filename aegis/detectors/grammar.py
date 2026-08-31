@@ -145,6 +145,53 @@ class GrammarAnalysisResult:
     def flags(self) -> list[str]:
         return [f"[Grammar] {i.message}" for i in self.issues if i.severity == "MEDIUM"]
 
+    def to_suggestions(self, text: str = "") -> list:
+        """
+        Convert grammar issues into WritingSuggestion objects for the
+        writing assistant pipeline. Requires the original document text
+        to compute character offsets.
+
+        Returns a list of WritingSuggestion instances. Imports lazily to
+        avoid circular dependencies (grammar.py is a detector, not a
+        writing module).
+        """
+        from aegis.writing.suggestion import WritingSuggestion
+
+        suggestions = []
+        severity_map = {"LOW": "info", "MEDIUM": "warning"}
+
+        for issue in self.issues:
+            sev = severity_map.get(issue.severity, "info")
+
+            # Map grammar categories to writing suggestion categories
+            cat_map = {
+                "contraction": "style",
+                "spelling_mix": "spelling",
+                "agreement": "grammar",
+                "usage": "grammar",
+                "style": "clarity",
+            }
+            category = cat_map.get(issue.category, "grammar")
+
+            # For each example, try to find its position in the text
+            for example in issue.examples[:3]:
+                # Examples may have context padding; find the core match
+                idx = text.find(example)
+                if idx >= 0:
+                    suggestions.append(WritingSuggestion(
+                        category=category,
+                        severity=sev,
+                        original_text=example,
+                        suggested_text=example,  # Grammar issues flag but don't auto-fix
+                        explanation=f"[Grammar] {issue.message}",
+                        start_offset=idx,
+                        end_offset=idx + len(example),
+                        confidence=0.70,
+                        rule_source=issue.rule_source,
+                    ))
+
+        return suggestions
+
 
 class GrammarLanguageChecker:
     """Offline, dependency-light grammar/usage/spelling-consistency checks."""
