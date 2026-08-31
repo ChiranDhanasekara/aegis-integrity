@@ -543,6 +543,157 @@ def index_summary(index_dir):
 
 
 # ---------------------------------------------------------------------------
+# write (v4.0)
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.argument("submission", type=click.Path(exists=True))
+@click.option("--output-docx", "-o", default=None, type=click.Path(),
+              help="Apply accepted suggestions and save to new DOCX file.")
+@click.option("--tracked-changes", is_flag=True,
+              help="Export with native Microsoft Word revision XML (<w:ins>/<w:del>).")
+@click.option("--json-output", "-j", default=None, type=click.Path(),
+              help="Write structured suggestions and clarity metrics to JSON.")
+def write(submission, output_docx, tracked_changes, json_output):
+    """Run rule-based writing assistant & clarity scoring on a manuscript."""
+    from aegis.core.document import DocumentParser
+    from aegis.writing.rewriter import AcademicRewriter
+    from aegis.writing.clarity_scorer import ClarityScorer
+    from aegis.export.docx_editor import DocxEditor
+    from aegis.export.docx_tracked_changes import DocxTrackedChangesExporter
+
+    console.print(f"[bold cyan]Analyzing manuscript writing:[/] {submission}")
+    parser = DocumentParser()
+    doc = parser.parse(submission)
+
+    rewriter = AcademicRewriter()
+    clarity_scorer = ClarityScorer()
+
+    suggestions = rewriter.analyze(doc.body_text)
+    clarity = clarity_scorer.analyze(doc.body_text)
+
+    # Display Clarity Card
+    console.print(Panel(
+        f"[bold]Clarity Score:[/] [green]{clarity.overall_clarity_score}/100[/] | "
+        f"[bold]FK Grade:[/] {clarity.avg_fk_grade} | "
+        f"[bold]Fog Index:[/] {clarity.avg_fog_index} | "
+        f"[bold]Sentences:[/] {clarity.total_sentences}",
+        title="[bold]AEGIS Clarity & Readability Index[/]",
+        border_style="cyan"
+    ))
+
+    # Display Suggestions Table
+    if suggestions.all:
+        t = Table("Category", "Original", "Suggestion", "Explanation", box=box.ROUNDED)
+        for s in suggestions.all[:25]:
+            cat_color = "cyan" if s.category == "wordiness" else "yellow" if s.category == "grammar" else "green"
+            orig = f"[red]{s.original_text[:30]}[/]"
+            repl = f"[bold green]{s.suggested_text[:30] if s.suggested_text else '(remove)'}[/]"
+            t.add_row(f"[{cat_color}]{s.category.upper()}[/]", orig, repl, s.explanation[:45])
+        console.print(t)
+        console.print(f"Total: [bold cyan]{len(suggestions.all)}[/] suggestion(s) identified.")
+    else:
+        console.print("[green]✓ No wordiness, grammar, or stylistic issues identified.[/]")
+
+    # Output JSON if requested
+    if json_output:
+        out_data = {
+            "submission": submission,
+            "clarity": {
+                "overall_score": clarity.overall_clarity_score,
+                "avg_fk_grade": clarity.avg_fk_grade,
+                "avg_fog_index": clarity.avg_fog_index,
+            },
+            "suggestions": [s.to_dict() for s in suggestions.all],
+        }
+        with open(json_output, "w", encoding="utf-8") as f:
+            json.dump(out_data, f, indent=2)
+        console.print(f"Suggestions saved to: [cyan]{json_output}[/]")
+
+    # Apply to DOCX if requested
+    if output_docx:
+        if tracked_changes:
+            exporter = DocxTrackedChangesExporter(submission if submission.endswith(".docx") else None)
+            if not submission.endswith(".docx"):
+                for p in doc.body_text.split("\n\n"):
+                    if p.strip():
+                        exporter.document.add_paragraph(p.strip())
+            for s in suggestions.all:
+                s.accept()
+            exporter.apply_tracked_suggestions(suggestions)
+            exporter.save(output_docx)
+            console.print(f"[bold green]Saved with Word Tracked Changes:[/] {output_docx}")
+        else:
+            editor = DocxEditor(submission if submission.endswith(".docx") else None)
+            if not submission.endswith(".docx"):
+                for p in doc.body_text.split("\n\n"):
+                    if p.strip():
+                        editor.document.add_paragraph(p.strip())
+            for s in suggestions.all:
+                s.accept()
+            editor.apply_suggestions(suggestions)
+            editor.save(output_docx)
+            console.print(f"[bold green]Saved revised DOCX:[/] {output_docx}")
+
+
+# ---------------------------------------------------------------------------
+# fingerprint (v4.0)
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.argument("submission", type=click.Path(exists=True))
+@click.option("--baseline", "-b", multiple=True, type=click.Path(exists=True),
+              help="Author baseline document(s) to verify authenticity against. Repeatable.")
+def fingerprint(submission, baseline):
+    """Extract stylometric writing fingerprint and verify authorship consistency."""
+    from aegis.core.document import DocumentParser
+    from aegis.detectors.writing_fingerprint import WritingFingerprinter
+
+    parser = DocumentParser()
+    doc = parser.parse(submission)
+    fp = WritingFingerprinter()
+    vec = fp.extract_vector(doc.body_text)
+
+    console.print(Panel(
+        f"[bold]Words:[/] {vec.word_count} | [bold]Sentences:[/] {vec.sentence_count} | "
+        f"[bold]Mean Sentence Length:[/] {vec.mean_sentence_length:.1f} ± {vec.std_sentence_length:.1f}\n"
+        f"[bold]TTR (Type-Token Ratio):[/] {vec.type_token_ratio:.3f} | "
+        f"[bold]Yule's K:[/] {vec.yules_k:.2f} | "
+        f"[bold]Passive Voice Ratio:[/] {vec.passive_voice_ratio:.2f}",
+        title=f"[bold]Stylometric Fingerprint: {Path(submission).name}[/]",
+        border_style="magenta"
+    ))
+
+    if baseline:
+        console.print("[bold cyan]Comparing against author baselines...[/]")
+        baseline_docs = _collect_docs(baseline)
+        if baseline_docs:
+            combined_baseline = "\n\n".join(t for _, t in baseline_docs)
+            base_vec = fp.extract_vector(combined_baseline)
+            res = fp.compare_vectors(base_vec, vec)
+            
+            verdict_color = "green" if res.is_consistent else "red"
+            verdict_text = "CONSISTENT (Same Author Profile)" if res.is_consistent else "DIVERGENT (Potential Ghostwriting / Inconsistency)"
+            
+            console.print(f"Authorship Match: [{verdict_color}]{verdict_text}[/]")
+            console.print(f"Distance Score: [bold]{res.distance_score:.2f}[/] | Burrows' Delta: {res.burrows_delta:.2f}")
+            if res.divergence_areas:
+                console.print("[yellow]Divergence Indicators:[/]")
+                for d in res.divergence_areas:
+                    console.print(f"  • {d}")
+    else:
+        # Check internal segment consistency
+        segment_results = fp.analyze_segments(doc.body_text)
+        if segment_results:
+            inconsistent = [r for r in segment_results if not r.is_consistent]
+            if inconsistent:
+                console.print(f"[yellow]Warning: {len(inconsistent)} stylistic shift(s) detected between adjacent sections.[/]")
+            else:
+                console.print("[green]✓ Stylistic tone and vocabulary remain consistent across document segments.[/]")
+
+
+
+# ---------------------------------------------------------------------------
 # serve
 # ---------------------------------------------------------------------------
 
@@ -551,13 +702,13 @@ def index_summary(index_dir):
 @click.option("--port", default=8000, show_default=True)
 @click.option("--reload", is_flag=True, help="Enable hot-reload (development only).")
 def serve(host, port, reload):
-    """Start the AEGIS REST API server."""
+    """Start the AEGIS interactive Web Application & REST API server."""
     try:
         import uvicorn
     except ImportError:
         console.print("[red]uvicorn not installed:[/] pip install uvicorn[standard]")
         sys.exit(1)
-    console.print(f"Starting AEGIS API on [cyan]http://{host}:{port}[/]")
+    console.print(f"Starting AEGIS Web Application on [bold cyan]http://{host}:{port}[/]")
     uvicorn.run(
         "aegis.api.app:app",
         host=host,

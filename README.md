@@ -1,19 +1,18 @@
-# AEGIS Academic Integrity Checker
+# AEGIS Academic Writing & Integrity Platform
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.0.0-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-4.0.0-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-brightgreen?style=for-the-badge" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/offline-first-orange?style=for-the-badge" alt="Offline">
   <img src="https://img.shields.io/badge/bias--aware-ESL%20calibrated-purple?style=for-the-badge" alt="Bias Aware">
-  <img src="https://img.shields.io/github/stars/sunilgentyala/aegis-integrity?style=for-the-badge" alt="Stars">
+  <img src="https://img.shields.io/badge/writing--assistant-rule--based-cyan?style=for-the-badge" alt="Writing Assistant">
 </p>
 
-> **Open-source, offline, bias-aware academic integrity analysis.**
-> Documents are processed entirely on your own hardware and never uploaded anywhere. Citation checks may query Crossref/OpenAlex with reference metadata (titles, authors, DOIs) when online verification is enabled.
-> Analyzes plagiarism, AI-generated content, citation hallucinations, ghostwriting, predatory references, and essay mill patterns in a single pipeline -- plus an experimental token-distribution heuristic for LLM watermark research.
-> **Plagiarism detection is corpus-based, not a live web/database crawl:** AEGIS compares your document against a corpus of papers *you supply* (your own prior works, a downloaded reference set, etc. -- see [Building a Corpus Index](HOWTO.md#9-building-a-corpus-index)). With no corpus loaded, plagiarism modules correctly report "no prior works loaded" rather than silently finding nothing to flag -- that isn't a scan failure.
-> Results are a supporting signal for human review, not a determination of misconduct.
+> **Open-source, offline, privacy-first academic writing assistant & integrity platform.**
+> AEGIS combines Turnitin-style similarity reporting, QuillBot-style deterministic writing assistance, publication-quality DOCX tracked-changes export, citation verification, and ESL-calibrated AI content detection into a unified platform.
+> Documents are processed locally on your own hardware. External open-access scholarly discovery (OpenAlex, Semantic Scholar, arXiv, CORE) uses extracted key-phrases without transmitting raw manuscript text.
+> The platform is designed to actively assist authors in improving academic clarity and citation integrity rather than circumventing detection tools.
 
 ---
 
@@ -211,94 +210,91 @@ submission (PDF / DOCX / TEX / TXT)
   DocumentParser              -- PyMuPDF / python-docx / TexSoup / striprtf
        |
   ┌────┴──────────────────────────────────────────────────────────────┐
-  │  AEGISPipeline v3.0                                               │
+  │  AEGISPipeline v4.0                                               │
   │                                                                   │
+  │  SimilarityReportGenerator [v4] unified spans, coverage, sources  │
+  │  AcademicRewriter          [v4] 9 rule-based rewrite categories   │
+  │  ClarityScorer             [v4] FK grade, Fog index, coherence    │
+  │  DocxTrackedChangesExporter[v4] native OpenXML <w:ins>/<w:del>    │
+  │  PDFReportExporter         [v4] publication-ready executive report│
+  │  WritingFingerprinter      [v4] Burrows' Delta, style vectors     │
+  │  OpenAccessCorpusBuilder   [v4] OpenAlex, S2, arXiv, CORE         │
   │  NGramDetector             word 3-gram + char 5-gram MinHash LSH  │
   │  SemanticDetector          SBERT + FAISS + CrossEncoder reranker  │
-  │  AIContentDetector[v2.5]   GPT-2 perplexity+burstiness+ESL+tell   │
+  │  AIContentDetector[v4.0]   sentence heatmaps + perplexity + tells │
   │  CitationIntegrityDetector Crossref REST API (DOI resolution)     │
   │  StylometricAnalyzer       Burrows' Delta; 60-dim feature vector  │
   │  SelfPlagiarismDetector    SBERT + n-gram vs. prior works         │
-  │  LLMWatermarkDetector [v2.1] experimental, no real key            │
-  │  CitationNetworkAnalyzer[v2] self-cite inflation; OpenAlex        │
-  │  SemanticCoherenceAnalyzer[v2] discourse connectors; uniformity   │
-  │  BatchAnalyzer         [v2] classroom-level essay mill detection  │
-  │  TargetPublisherVerifier[v2.4] IEEE/ACM/Elsevier/IET/IETE/BCS     │
-  │  MathFormulaChecker    [v3.0] equation numbering/refs/notation    │
-  │  GrammarLanguageChecker[v3.0] contractions/spelling/agreement     │
-  │  GuidelineComplianceChecker[v3.0] IEEE/ACM/BCS/IET/ISACA, separate│
+  │  MathFormulaChecker        equation numbering/refs/notation       │
+  │  GrammarLanguageChecker    contractions/spelling/agreement        │
+  │  GuidelineComplianceChecker IEEE/ACM/BCS/IET/ISACA compliance     │
   └────────────────────────────┬──────────────────────────────────────┘
                                |
-                          AnalysisReport
-                         /             \
-                  JSON report       HTML report
-                                  (self-contained,
-                                   offline-viewable)
+                        AnalysisReport
+                       /       |       \
+               JSON Report  HTML/PDF   Edited DOCX
+                                       (with Word Tracked Changes)
 ```
 
 ---
 
 ## Installation
 
-**Minimal (no ML models -- citation, stylometric, watermark, coherence, math,
-grammar, and per-venue guideline compliance; all pure-Python):**
+**Minimal (no ML models -- writing assistant, clarity, math, grammar, DOCX export, guideline compliance; all pure-Python):**
 ```bash
 pip install -e .
 ```
 
-**Full (all 14 detectors):**
+**Full (all detectors, SBERT similarity, GPT-2 perplexity):**
 ```bash
 pip install -e ".[ml,nlp,bib]"
 python -m spacy download en_core_web_sm
-```
-
-**Docker (recommended for production / air-gapped environments):**
-```bash
-docker compose up --build
-# API available at http://localhost:8000 (bound to localhost only by default)
-# Swagger UI at http://localhost:8000/docs
-```
-The container runs as a non-root user and its healthcheck needs no extra
-tools. By default the compose file only publishes the API on the host's
-loopback interface. Before exposing it beyond localhost (a different host
-binding, a reverse proxy, etc.), set `AEGIS_API_KEY` -- otherwise every
-route except `/health` is unauthenticated.
-
-**Windows one-click:**
-```bat
-install.bat
 ```
 
 ---
 
 ## Quick Start
 
-### Command-line
+### 1. Interactive Web Application
+
+Launch the AEGIS Web Application with dashboard, live writing assistant, Turnitin-style similarity report, and DOCX/PDF export:
 
 ```bash
-# Full analysis (all 14 detectors):
+aegis serve --host 127.0.0.1 --port 8000
+```
+Open **`http://localhost:8000`** in your browser.
+
+### 2. Writing Assistant & DOCX Tracked Changes (CLI)
+
+```bash
+# Analyze manuscript writing and display categorized suggestions + clarity index:
+aegis write manuscript.docx
+
+# Apply accepted suggestions and export with native Microsoft Word revision redlines:
+aegis write manuscript.docx --output-docx manuscript_revised.docx --tracked-changes
+
+# Output structured suggestions to JSON:
+aegis write manuscript.docx --json-output suggestions.json
+```
+
+### 3. Stylometric Authorship Fingerprinting (CLI)
+
+```bash
+# Extract author style vector and check segment consistency:
+aegis fingerprint manuscript.docx
+
+# Verify authenticity against author's historical publications (ghostwriting check):
+aegis fingerprint manuscript.docx --baseline ./prior_papers/author_paper1.pdf
+```
+
+### 4. Integrity Analysis & Guidelines (CLI)
+
+```bash
+# Full analysis:
 aegis analyze paper.pdf --output report.json --html report.html
 
-# Fast, offline-only scan: math + grammar + per-venue guideline compliance,
-# checked SEPARATELY for each requested venue -- no ML models at all:
+# Fast, offline-only scan: math + grammar + per-venue guideline compliance:
 aegis guidelines paper.pdf --venues IEEE,ACM,BCS,IET,ISACA --html guidelines.html
-
-# Fold guideline compliance into the full analysis instead:
-aegis analyze paper.pdf --guidelines all --html report.html
-
-# Disable the experimental watermark heuristic entirely:
-aegis analyze paper.pdf --watermark-mode disabled
-
-# Against a reference corpus:
-aegis analyze paper.pdf --corpus ./prior_papers/ --html report.html
-
-# Self-plagiarism check against own prior publications:
-aegis analyze paper.pdf --prior-works ./my_previous_papers/ --html report.html
-
-# Pairwise comparison (conference vs. journal version):
-aegis compare conference_draft.pdf journal_submission.pdf
-
-# Batch / classroom analysis (essay mill detection):
 aegis batch ./submissions/ --html batch_report.html
 
 # Build a persistent index for a large corpus:
