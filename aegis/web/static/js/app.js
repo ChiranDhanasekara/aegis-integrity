@@ -123,7 +123,7 @@ function handleFileSelected(e) {
 }
 
 async function uploadAndAnalyzeFile(file) {
-  showToast(`Uploading ${file.name}...`, 'info');
+  showToast(`Parsing ${file.name}...`, 'info');
   state.documentTitle = file.name;
   state.documentFormat = file.name.split('.').pop().toLowerCase();
 
@@ -131,31 +131,50 @@ async function uploadAndAnalyzeFile(file) {
   formData.append('file', file);
 
   try {
-    const response = await fetch('/api/analyze', {
+    const response = await fetch('/api/document/upload', {
       method: 'POST',
       body: formData,
     });
 
     if (!response.ok) {
-      // If backend API isn't available or errored, fallback to client-side parsing
       throw new Error(`Server returned HTTP ${response.status}`);
     }
 
     const data = await response.json();
-    processAnalysisResponse(data, file.name);
-    showToast('Analysis completed successfully!', 'success');
+    state.documentText = data.text || '';
+    state.suggestions = data.suggestions || [];
+    state.clarityReport = data.clarity || null;
+    
+    // Add to recent analyses history
+    if (state.recentAnalyses) {
+      state.recentAnalyses.unshift({
+        name: file.name,
+        date: new Date().toLocaleDateString(),
+        risk: 'LOW',
+        similarity: '0%',
+        suggestions: state.suggestions.length,
+        status: 'analyzed'
+      });
+    }
+
+    router.navigate('editor');
+    showToast(`Loaded ${data.word_count || ''} words with ${state.suggestions.length} suggestions!`, 'success');
   } catch (err) {
-    console.warn('API error, reading text client-side:', err);
-    // Fallback: Read text file locally
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target.result;
-      state.documentText = text;
-      await runLocalWritingAssistant(text);
-      router.navigate('editor');
-      showToast('Document loaded in editor', 'success');
-    };
-    reader.readAsText(file);
+    console.warn('Backend upload parse error:', err);
+    // Only for plain text files fallback to client reader
+    if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const text = event.target.result;
+        state.documentText = text;
+        await runLocalWritingAssistant(text);
+        router.navigate('editor');
+        showToast('Document loaded in editor', 'success');
+      };
+      reader.readAsText(file);
+    } else {
+      showToast(`Could not parse document: ${err.message}`, 'error');
+    }
   }
 }
 
@@ -432,11 +451,76 @@ function replaceTextInDocument(search, replace) {
   updateEditorStats();
 }
 
-function exportEditedDocx() {
-  showToast('Exporting manuscript with accepted revisions...', 'info');
-  setTimeout(() => {
-    showToast('DOCX exported successfully!', 'success');
-  }, 1000);
+async function exportEditedDocx(withTrackedChanges = true) {
+  showToast('Exporting DOCX with revisions...', 'info');
+  const acceptedIds = state.suggestions.filter(s => s.status === 'accepted').map(s => s.id);
+
+  try {
+    const response = await fetch('/api/export/docx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: state.documentText,
+        doc_title: state.documentTitle.endsWith('.docx') ? state.documentTitle : `${state.documentTitle}.docx`,
+        tracked_changes: withTrackedChanges,
+        accepted_ids: acceptedIds,
+        suggestions: state.suggestions,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Export failed (HTTP ${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = state.documentTitle.replace(/\.[^/.]+$/, "") + "_revised.docx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    showToast('DOCX downloaded successfully!', 'success');
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast(`Export failed: ${err.message}`, 'error');
+  }
+}
+
+async function exportPdfReport() {
+  showToast('Generating executive PDF report...', 'info');
+  try {
+    const response = await fetch('/api/export/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        doc_title: state.documentTitle,
+        text: state.documentText,
+        overall_risk: 'LOW',
+        suggestions: state.suggestions,
+        clarity: state.clarityReport,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`PDF generation failed (HTTP ${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = state.documentTitle.replace(/\.[^/.]+$/, "") + "_integrity_report.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+    showToast('PDF Report downloaded!', 'success');
+  } catch (err) {
+    console.error('PDF Export error:', err);
+    showToast(`PDF Export failed: ${err.message}`, 'error');
+  }
 }
 
 // ==========================================================================

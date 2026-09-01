@@ -44,6 +44,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from aegis import __version__ as AEGIS_VERSION
+from aegis.core.document import DocumentParser
 from aegis.core.pipeline import AEGISPipeline, PipelineConfig
 from aegis.corpus.indexer import CorpusIndexer
 from aegis.report.generator import ReportGenerator
@@ -404,6 +405,42 @@ class ApplyPayload(BaseModel):
     text: str
     accepted_ids: list[str]
     suggestions: list[dict]
+
+
+@app.post("/api/document/upload")
+async def api_upload_document(file: UploadFile = File(...)):
+    """Parse an uploaded DOCX, PDF, or text file and run writing & clarity analysis."""
+    suffix = Path(file.filename).suffix if file.filename else ".docx"
+    content = await _read_upload_capped(file)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        parser = DocumentParser()
+        parsed_doc = parser.parse(tmp_path)
+        doc_text = parsed_doc.body_text or parsed_doc.full_text
+
+        sug_set = _rewriter_engine.analyze(doc_text)
+        clarity = _clarity_engine.analyze(doc_text)
+
+        return {
+            "filename": file.filename,
+            "text": doc_text,
+            "word_count": parsed_doc.word_count,
+            "suggestions": [s.to_dict() for s in sug_set.all],
+            "summary": sug_set.summary,
+            "clarity": {
+                "overall_score": clarity.overall_clarity_score,
+                "fk_grade": clarity.avg_fk_grade,
+                "fog_index": clarity.avg_fog_index,
+                "avg_sentence_words": clarity.avg_sentence_words,
+                "total_sentences": clarity.total_sentences,
+            },
+        }
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 @app.post("/api/writing/analyze")

@@ -68,6 +68,36 @@ class TestWebAPI:
         data = resp.json()
         assert data["updated_text"] == "We used this to start."
 
+    def test_document_upload_endpoint(self):
+        # Test uploading a text document to /api/document/upload
+        files = {"file": ("test_doc.txt", b"In order to test the pipeline, we conduct experiments.")}
+        resp = self.client.post("/api/document/upload", files=files)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "text" in data
+        assert "suggestions" in data
+        assert "clarity" in data
+        assert len(data["suggestions"]) >= 1
+
+    def test_export_docx_and_pdf_endpoints(self):
+        # Test DOCX export
+        resp = self.client.post(
+            "/api/export/docx",
+            json={"text": "This is a test paragraph.", "tracked_changes": False}
+        )
+        assert resp.status_code == 200
+        assert "openxmlformats" in resp.headers.get("content-type", "")
+        assert len(resp.content) > 100
+
+        # Test PDF export
+        resp_pdf = self.client.post(
+            "/api/export/pdf",
+            json={"text": "This is a test paragraph.", "doc_title": "Test Paper"}
+        )
+        assert resp_pdf.status_code == 200
+        assert "application/pdf" in resp_pdf.headers.get("content-type", "")
+        assert len(resp_pdf.content) > 500
+
     def test_standalone_web_app_factory(self):
         web_app = create_web_app()
         web_client = TestClient(web_app)
