@@ -113,15 +113,13 @@ class DocxTrackedChangesExporter:
             r_before.append(t_before)
             p_element.append(r_before)
 
-        # 2. Fixed Replacement in RED colored text (no cut word shown)
+        # 2. Fixed Replacement in RED colored text (follows exact surrounding style, no bold added)
         if suggested_text:
             r_fix = OxmlElement('w:r')
             r_pr = OxmlElement('w:rPr')
             color_elem = OxmlElement('w:color')
-            color_elem.set(qn('w:val'), 'D92D20')  # Academic red color
+            color_elem.set(qn('w:val'), 'D92D20')  # Exact red color
             r_pr.append(color_elem)
-            bold_elem = OxmlElement('w:b')
-            r_pr.append(bold_elem)
             r_fix.append(r_pr)
 
             t_fix = OxmlElement('w:t')
