@@ -198,6 +198,7 @@ def corpus_build(
 
 
 @app.post("/analyze", dependencies=[Depends(require_api_key)])
+@app.post("/api/analyze", dependencies=[Depends(require_api_key)])
 async def analyze(
     file: UploadFile = File(...),
     format: str = Query("json", description="Output format: json | html"),
@@ -328,6 +329,7 @@ async def compare_pair(
 
 
 @app.post("/batch", dependencies=[Depends(require_api_key)])
+@app.post("/api/batch", dependencies=[Depends(require_api_key)])
 async def batch(
     files: list[UploadFile] = File(..., description="At least 2 submissions"),
     run_ai: bool = Query(True, description="Score each document for AI content "
