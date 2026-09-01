@@ -11,7 +11,40 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   
-  <!-- Main Stylesheet -->
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              400: '#60a5fa',
+              500: '#3b82f6',
+              600: '#2563eb',
+            },
+            surface: 'var(--bg-surface)',
+            'surface-raised': 'var(--bg-surface-raised)',
+            'surface-card': 'var(--bg-surface-card)',
+            'surface-elevated': 'var(--bg-surface-elevated)',
+            'border-subtle': 'var(--border-subtle)',
+            'border-strong': 'var(--border-strong)',
+            'text-main': 'var(--text-main)',
+            'text-muted': 'var(--text-muted)',
+            'text-subtle': 'var(--text-subtle)',
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Outfit', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Main Custom Stylesheet -->
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body class="bg-surface text-main antialiased selection:bg-brand-500 selection:text-white">
