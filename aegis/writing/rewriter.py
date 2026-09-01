@@ -219,6 +219,25 @@ _USAGE_CORRECTIONS: list[tuple[str, str, str, str]] = [
      "\"Would of\" should be \"would have\".", "usage"),
     (r"\bshould of\b", "should have",
      "\"Should of\" should be \"should have\".", "usage"),
+    # Corrupted auxiliary "to be" restoration (fixing automated bypasser artifacts)
+    (r"\bto I\b", "to be", "Restores corrupted auxiliary 'to be' verb.", "grammar"),
+    (r"\bcannot I\b", "cannot be", "Restores corrupted auxiliary 'cannot be' verb.", "grammar"),
+    (r"\bcan I\b", "can be", "Restores corrupted auxiliary 'can be' verb.", "grammar"),
+    (r"\bshould I\b", "should be", "Restores corrupted auxiliary 'should be' verb.", "grammar"),
+    (r"\bshould not I\b", "should not be", "Restores corrupted auxiliary 'should not be' verb.", "grammar"),
+    (r"\bmust I\b", "must be", "Restores corrupted auxiliary 'must be' verb.", "grammar"),
+    (r"\bwill I\b", "will be", "Restores corrupted auxiliary 'will be' verb.", "grammar"),
+    (r"\bwould I\b", "would be", "Restores corrupted auxiliary 'would be' verb.", "grammar"),
+    (r"\bcould I\b", "could be", "Restores corrupted auxiliary 'could be' verb.", "grammar"),
+    (r"\bhave I\b", "have been", "Restores corrupted auxiliary 'have been' verb.", "grammar"),
+    (r"\bhas I\b", "has been", "Restores corrupted auxiliary 'has been' verb.", "grammar"),
+    (r"\bhad I\b", "had been", "Restores corrupted auxiliary 'had been' verb.", "grammar"),
+    (r"\btraditionally I\b", "traditionally been", "Restores corrupted auxiliary 'traditionally been' verb.", "grammar"),
+    (r"\brather than I\b", "rather than be", "Restores auxiliary 'rather than be' verb.", "grammar"),
+    (r"\bST-GCN I\b", "ST-GCN is", "Restores auxiliary 'ST-GCN is' verb.", "grammar"),
+    (r"\bproject I\b", "project is", "Restores auxiliary 'project is' verb.", "grammar"),
+    (r"\bsmoothing I\b", "smoothing is", "Restores auxiliary 'smoothing is' verb.", "grammar"),
+    (r"\bactions I\b", "actions are", "Restores auxiliary 'actions are' verb.", "grammar"),
 ]
 
 # UK/US spelling pairs (imported concept from grammar.py)
