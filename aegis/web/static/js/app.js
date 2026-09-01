@@ -5,6 +5,7 @@
 // Application State Store
 const state = {
   currentView: 'dashboard',
+  originalText: '',
   documentText: '',
   documentTitle: 'Untitled Document',
   documentFormat: 'docx',
@@ -221,6 +222,7 @@ async function uploadAndAnalyzeFile(file) {
     const data = await response.json();
     updateAnalysisProgress(100, 'Analysis complete!', 4);
 
+    state.originalText = data.text || '';
     state.documentText = data.text || '';
     state.suggestions = data.suggestions || [];
     state.clarityReport = data.clarity || null;
@@ -577,9 +579,10 @@ async function exportEditedDocx(withTrackedChanges = true) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: state.documentText,
+        base_text: state.originalText || state.documentText,
         doc_title: state.documentTitle.endsWith('.docx') ? state.documentTitle : `${state.documentTitle}.docx`,
         tracked_changes: withTrackedChanges,
-        accepted_ids: acceptedIds,
+        accepted_ids: acceptedIds.length > 0 ? acceptedIds : null,
         suggestions: state.suggestions,
       }),
     });

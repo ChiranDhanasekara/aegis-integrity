@@ -71,13 +71,12 @@ class TestDocxTrackedChangesExporter:
         success = exporter.insert_tracked_change(p, "in order to", "to")
         assert success is True
         
-        # Verify XML contains <w:del> and <w:ins>
+        # Verify XML contains red color highlight without cut words (no w:del)
         xml = p._p.xml
-        assert "w:del" in xml
-        assert "in order to" in xml
-        assert "w:ins" in xml
+        assert "w:del" not in xml
+        assert "in order to" not in xml
+        assert "D92D20" in xml
         assert "to" in xml
-        assert 'w:author="AEGIS Reviewer"' in xml
 
     def test_apply_tracked_suggestions(self):
         exporter = DocxTrackedChangesExporter()
@@ -99,9 +98,9 @@ class TestDocxTrackedChangesExporter:
         assert applied == 1
         
         xml = exporter.document.paragraphs[0]._p.xml
-        assert "w:del" in xml
-        assert "comprised of" in xml
-        assert "w:ins" in xml
+        assert "w:del" not in xml
+        assert "comprised of" not in xml
+        assert "D92D20" in xml
         assert "composed of" in xml
 
     def test_save_tracked_changes(self):

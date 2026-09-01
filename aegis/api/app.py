@@ -502,6 +502,7 @@ def api_apply_suggestions(payload: ApplyPayload):
 
 class ExportDocxPayload(BaseModel):
     text: str
+    base_text: Optional[str] = None
     doc_title: Optional[str] = "manuscript_edited.docx"
     tracked_changes: Optional[bool] = True
     accepted_ids: Optional[list[str]] = None
@@ -525,8 +526,11 @@ def api_export_docx(payload: ExportDocxPayload):
     try:
         if payload.tracked_changes and payload.suggestions:
             exporter = DocxTrackedChangesExporter(author="AEGIS Writing Assistant")
-            # Build initial doc with base paragraphs
-            for para in payload.text.split("\n\n"):
+            # Build initial doc with original/base paragraphs
+            source = payload.base_text if payload.base_text and payload.base_text.strip() else payload.text
+            # Split paragraphs cleanly by double or single newlines
+            raw_paras = source.split("\n\n") if "\n\n" in source else source.splitlines()
+            for para in raw_paras:
                 if para.strip():
                     exporter.document.add_paragraph(para.strip())
             
@@ -546,7 +550,8 @@ def api_export_docx(payload: ExportDocxPayload):
                         end_offset=s_dict.get("end_offset", 0),
                         confidence=s_dict.get("confidence", 0.8),
                     )
-                    if sug.id in accepted_set:
+                    # If accepted_set is specified, only apply accepted; if no set, apply all
+                    if not accepted_set or sug.id in accepted_set:
                         sug.accept()
                     sug_list.append(sug)
                 except Exception:
@@ -555,7 +560,9 @@ def api_export_docx(payload: ExportDocxPayload):
             exporter.save(tmp_out.name)
         else:
             editor = DocxEditor()
-            for para in payload.text.split("\n\n"):
+            source = payload.text
+            raw_paras = source.split("\n\n") if "\n\n" in source else source.splitlines()
+            for para in raw_paras:
                 if para.strip():
                     editor.document.add_paragraph(para.strip())
             editor.save(tmp_out.name)

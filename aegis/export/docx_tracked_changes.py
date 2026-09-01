@@ -77,78 +77,69 @@ class DocxTrackedChangesExporter:
         suggested_text: str,
     ) -> bool:
         """
-        Insert a tracked deletion (<w:del>) and insertion (<w:ins>) into a paragraph.
+        Replace target text with the fixed suggestion formatted in RED colored text.
+        Does NOT show cut/deleted words.
         """
-        if original_text not in paragraph.text:
+        if not original_text or not original_text.strip():
             return False
 
-        now_str = self._get_timestamp()
-        del_id = self._next_revision_id()
-        ins_id = self._next_revision_id()
-
-        # Build XML for deletion
-        del_xml = (
-            f'<w:del {nsdecls("w")} w:id="{del_id}" w:author="{self.author}" w:date="{now_str}">'
-            f'<w:r><w:delText xml:space="preserve">{original_text}</w:delText></w:r>'
-            f'</w:del>'
-        )
-
-        # Build XML for insertion (if not empty removal)
-        ins_xml = ""
-        if suggested_text:
-            ins_xml = (
-                f'<w:ins {nsdecls("w")} w:id="{ins_id}" w:author="{self.author}" w:date="{now_str}">'
-                f'<w:r><w:t xml:space="preserve">{suggested_text}</w:t></w:r>'
-                f'</w:ins>'
-            )
+        full_text = paragraph.text
+        idx = full_text.find(original_text)
+        if idx == -1:
+            # Case-insensitive fallback
+            idx = full_text.lower().find(original_text.lower())
+            if idx == -1:
+                return False
+            match_str = full_text[idx:idx + len(original_text)]
+        else:
+            match_str = original_text
 
         p_element = paragraph._p
+        before_text = full_text[:idx]
+        after_text = full_text[idx + len(match_str):]
 
-        # Find target in paragraph text
-        full_text = paragraph.text
-        if original_text in full_text:
-            # Reconstruct paragraph XML with revisions
-            # Split before and after match
-            parts = full_text.split(original_text, 1)
-            before_text = parts[0]
-            after_text = parts[1]
+        # Preserve paragraph properties (<w:pPr>)
+        p_pr = p_element.pPr
+        p_element.clear_content()
+        if p_pr is not None:
+            p_element.append(p_pr)
 
-            # Clear existing children of paragraph except paragraph properties (<w:pPr>)
-            p_pr = p_element.pPr
-            p_element.clear_content()
-            if p_pr is not None:
-                p_element.append(p_pr)
+        # 1. Before text run (normal styling)
+        if before_text:
+            r_before = OxmlElement('w:r')
+            t_before = OxmlElement('w:t')
+            t_before.text = before_text
+            t_before.set(qn('xml:space'), 'preserve')
+            r_before.append(t_before)
+            p_element.append(r_before)
 
-            # 1. Before text run
-            if before_text:
-                r_before = OxmlElement('w:r')
-                t_before = OxmlElement('w:t')
-                t_before.text = before_text
-                t_before.set(qn('xml:space'), 'preserve')
-                r_before.append(t_before)
-                p_element.append(r_before)
+        # 2. Fixed Replacement in RED colored text (no cut word shown)
+        if suggested_text:
+            r_fix = OxmlElement('w:r')
+            r_pr = OxmlElement('w:rPr')
+            color_elem = OxmlElement('w:color')
+            color_elem.set(qn('w:val'), 'D92D20')  # Academic red color
+            r_pr.append(color_elem)
+            bold_elem = OxmlElement('w:b')
+            r_pr.append(bold_elem)
+            r_fix.append(r_pr)
 
-            # 2. Tracked deletion
-            del_elem = parse_xml(del_xml)
-            p_element.append(del_elem)
+            t_fix = OxmlElement('w:t')
+            t_fix.text = suggested_text
+            t_fix.set(qn('xml:space'), 'preserve')
+            r_fix.append(t_fix)
+            p_element.append(r_fix)
 
-            # 3. Tracked insertion
-            if ins_xml:
-                ins_elem = parse_xml(ins_xml)
-                p_element.append(ins_elem)
+        # 3. After text run (normal styling)
+        if after_text:
+            r_after = OxmlElement('w:r')
+            t_after = OxmlElement('w:t')
+            t_after.text = after_text
+            t_after.set(qn('xml:space'), 'preserve')
+            r_after.append(t_after)
+            p_element.append(r_after)
 
-            # 4. After text run
-            if after_text:
-                r_after = OxmlElement('w:r')
-                t_after = OxmlElement('w:t')
-                t_after.text = after_text
-                t_after.set(qn('xml:space'), 'preserve')
-                r_after.append(t_after)
-                p_element.append(r_after)
-
-            return True
-
-        return False
+        return True
 
     def apply_tracked_suggestions(
         self, suggestions: Union[SuggestionSet, list[WritingSuggestion]]
