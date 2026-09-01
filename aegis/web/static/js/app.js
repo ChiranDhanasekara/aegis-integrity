@@ -122,13 +122,89 @@ function handleFileSelected(e) {
   }
 }
 
+// ==========================================================================
+// 3b. Upload & Analysis Progress Modal Controller
+// ==========================================================================
+
+function showAnalysisProgress(filename) {
+  const modal = document.getElementById('analysis-modal');
+  if (!modal) return;
+  document.getElementById('analysis-modal-filename').textContent = filename;
+  updateAnalysisProgress(10, 'Uploading document...', 1);
+  modal.classList.remove('hidden');
+}
+
+function updateAnalysisProgress(percentage, stageText, activeStep = 1) {
+  const pBar = document.getElementById('analysis-progress-bar');
+  const pNum = document.getElementById('analysis-percentage');
+  const pLabel = document.getElementById('analysis-stage-label');
+  
+  if (pBar) pBar.style.width = `${percentage}%`;
+  if (pNum) pNum.textContent = `${percentage}%`;
+  if (pLabel && stageText) pLabel.textContent = stageText;
+
+  // Update step indicators
+  for (let i = 1; i <= 4; i++) {
+    const stepEl = document.getElementById(`step-${i}`);
+    if (!stepEl) continue;
+    const icon = stepEl.querySelector('.step-icon');
+    
+    if (i < activeStep) {
+      stepEl.className = 'flex items-center gap-2.5 text-emerald-400 font-medium';
+      if (icon) {
+        icon.className = 'step-icon w-4 h-4 rounded-full flex items-center justify-center text-2xs bg-emerald-500/20 text-emerald-400 font-bold';
+        icon.textContent = '✓';
+      }
+    } else if (i === activeStep) {
+      stepEl.className = 'flex items-center gap-2.5 text-main font-medium';
+      if (icon) {
+        icon.className = 'step-icon w-4 h-4 rounded-full flex items-center justify-center text-2xs bg-brand-500 text-white font-bold animate-pulse';
+        icon.textContent = `${i}`;
+      }
+    } else {
+      stepEl.className = 'flex items-center gap-2.5 text-muted';
+      if (icon) {
+        icon.className = 'step-icon w-4 h-4 rounded-full flex items-center justify-center text-2xs bg-surface text-muted';
+        icon.textContent = `${i}`;
+      }
+    }
+  }
+}
+
+function hideAnalysisProgress() {
+  const modal = document.getElementById('analysis-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
 async function uploadAndAnalyzeFile(file) {
-  showToast(`Parsing ${file.name}...`, 'info');
   state.documentTitle = file.name;
   state.documentFormat = file.name.split('.').pop().toLowerCase();
+  
+  showAnalysisProgress(file.name);
+  showToast(`Uploading ${file.name}...`, 'info');
 
   const formData = new FormData();
   formData.append('file', file);
+
+  // Simulated progress stepper for responsive UX feedback
+  let progress = 15;
+  const progressTimer = setInterval(() => {
+    if (progress < 85) {
+      progress += Math.floor(Math.random() * 15) + 5;
+      if (progress > 85) progress = 85;
+      
+      let step = 1;
+      let label = 'Unpacking & extracting document...';
+      if (progress >= 30 && progress < 60) {
+        step = 2;
+        label = 'Evaluating grammar, wordiness & style...';
+      } else if (progress >= 60) {
+        step = 3;
+        label = 'Calculating readability & coherence metrics...';
+      }
+      updateAnalysisProgress(progress, label, step);
+    }
+  }, 250);
 
   try {
     const response = await fetch('/api/document/upload', {
@@ -136,11 +212,15 @@ async function uploadAndAnalyzeFile(file) {
       body: formData,
     });
 
+    clearInterval(progressTimer);
+
     if (!response.ok) {
       throw new Error(`Server returned HTTP ${response.status}`);
     }
 
     const data = await response.json();
+    updateAnalysisProgress(100, 'Analysis complete!', 4);
+
     state.documentText = data.text || '';
     state.suggestions = data.suggestions || [];
     state.clarityReport = data.clarity || null;
@@ -157,23 +237,56 @@ async function uploadAndAnalyzeFile(file) {
       });
     }
 
-    router.navigate('editor');
-    showToast(`Loaded ${data.word_count || ''} words with ${state.suggestions.length} suggestions!`, 'success');
+    setTimeout(() => {
+      hideAnalysisProgress();
+      router.navigate('editor');
+      showToast(`Analyzed ${data.word_count || state.documentText.split(/\s+/).length} words with ${state.suggestions.length} suggestions!`, 'success');
+    }, 400);
+
   } catch (err) {
-    console.warn('Backend upload parse error:', err);
-    // Only for plain text files fallback to client reader
-    if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const text = event.target.result;
-        state.documentText = text;
-        await runLocalWritingAssistant(text);
-        router.navigate('editor');
-        showToast('Document loaded in editor', 'success');
-      };
-      reader.readAsText(file);
-    } else {
-      showToast(`Could not parse document: ${err.message}`, 'error');
+    clearInterval(progressTimer);
+    console.warn('Backend upload parse error, trying client extraction fallback:', err);
+    
+    try {
+      if (file.name.endsWith('.docx') && window.mammoth) {
+        updateAnalysisProgress(60, 'Extracting Word text locally with Mammoth.js...', 2);
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await window.mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+        const cleanText = result.value || '';
+        
+        if (!cleanText.trim()) {
+          throw new Error('Extracted text from DOCX was empty.');
+        }
+
+        state.documentText = cleanText;
+        updateAnalysisProgress(85, 'Running local writing assistant...', 3);
+        await runLocalWritingAssistant(cleanText);
+        updateAnalysisProgress(100, 'Done!', 4);
+
+        setTimeout(() => {
+          hideAnalysisProgress();
+          router.navigate('editor');
+          showToast('DOCX parsed successfully via local engine', 'success');
+        }, 400);
+        return;
+      } else if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const text = event.target.result;
+          state.documentText = text;
+          await runLocalWritingAssistant(text);
+          hideAnalysisProgress();
+          router.navigate('editor');
+          showToast('Document loaded in editor', 'success');
+        };
+        reader.readAsText(file);
+        return;
+      } else {
+        throw err;
+      }
+    } catch (fallbackErr) {
+      hideAnalysisProgress();
+      showToast(`Failed to parse document: ${fallbackErr.message}`, 'error');
     }
   }
 }

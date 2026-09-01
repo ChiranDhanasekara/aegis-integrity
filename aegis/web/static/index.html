@@ -46,6 +46,8 @@
 
   <!-- Main Custom Stylesheet -->
   <link rel="stylesheet" href="/static/css/style.css">
+  <!-- Mammoth.js for Client-Side DOCX Ingestion Fallback -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js"></script>
 </head>
 <body class="bg-surface text-main antialiased selection:bg-brand-500 selection:text-white">
   
@@ -590,6 +592,59 @@
       </section>
 
     </main>
+
+    <!-- Analysis Progress Modal -->
+    <div id="analysis-modal" class="modal-backdrop hidden">
+      <div class="modal-card max-w-md w-full p-8 text-center" onclick="event.stopPropagation()">
+        
+        <!-- Animated Icon Shield -->
+        <div class="relative w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+          <div class="absolute inset-0 rounded-full bg-brand-500/20 animate-ping"></div>
+          <div class="relative w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center shadow-glow">
+            <svg class="w-8 h-8 text-white animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+          </div>
+        </div>
+
+        <h3 id="analysis-modal-title" class="font-display font-bold text-xl text-main mb-2">Analyzing Manuscript</h3>
+        <p id="analysis-modal-filename" class="text-xs text-muted font-mono mb-6 truncate max-w-xs mx-auto">manuscript.docx</p>
+
+        <!-- Progress Bar & Percentage -->
+        <div class="mb-6">
+          <div class="flex items-center justify-between text-xs mb-2">
+            <span id="analysis-stage-label" class="font-medium text-main text-left">Unpacking & extracting document...</span>
+            <span id="analysis-percentage" class="font-bold text-brand-400 font-mono">15%</span>
+          </div>
+          <div class="w-full h-2.5 rounded-full bg-surface-raised overflow-hidden border border-border-subtle p-0.5">
+            <div id="analysis-progress-bar" class="h-full rounded-full bg-gradient-to-r from-brand-500 via-indigo-500 to-emerald-400 transition-all duration-300 ease-out" style="width: 15%"></div>
+          </div>
+        </div>
+
+        <!-- Step Checklist -->
+        <div class="space-y-2.5 text-left text-xs bg-surface-raised/50 p-4 rounded-xl border border-border-subtle mb-4">
+          <div id="step-1" class="flex items-center gap-2.5 text-main font-medium">
+            <span class="step-icon w-4 h-4 rounded-full flex items-center justify-center text-2xs bg-brand-500/20 text-brand-400">1</span>
+            <span class="step-text">Parsing XML & extracting paragraphs</span>
+          </div>
+          <div id="step-2" class="flex items-center gap-2.5 text-muted">
+            <span class="step-icon w-4 h-4 rounded-full flex items-center justify-center text-2xs bg-surface text-muted">2</span>
+            <span class="step-text">Evaluating grammar, wordiness & style</span>
+          </div>
+          <div id="step-3" class="flex items-center gap-2.5 text-muted">
+            <span class="step-icon w-4 h-4 rounded-full flex items-center justify-center text-2xs bg-surface text-muted">3</span>
+            <span class="step-text">Calculating readability & coherence indices</span>
+          </div>
+          <div id="step-4" class="flex items-center gap-2.5 text-muted">
+            <span class="step-icon w-4 h-4 rounded-full flex items-center justify-center text-2xs bg-surface text-muted">4</span>
+            <span class="step-text">Building interactive editor & suggestion cards</span>
+          </div>
+        </div>
+
+        <p class="text-2xs text-muted">Processing 100% locally with high-precision NLP.</p>
+      </div>
+    </div>
 
     <!-- Source Comparison Modal -->
     <div id="source-modal" class="modal-backdrop hidden" onclick="closeSourceModal()">
