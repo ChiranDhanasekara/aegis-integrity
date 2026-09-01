@@ -505,8 +505,11 @@ function getCategoryBadgeColor(cat) {
   switch (cat) {
     case 'wordiness': return 'blue';
     case 'grammar': return 'accent';
+    case 'passive_voice': return 'amber';
     case 'nominalization': return 'green';
     case 'style': return 'purple';
+    case 'spelling': return 'cyan';
+    case 'sentence_length': return 'red';
     default: return 'accent';
   }
 }

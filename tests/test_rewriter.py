@@ -259,12 +259,23 @@ class TestAcademicRewriter:
         ss = self.rewriter.analyze(None)
         assert len(ss) == 0
 
+    def test_passive_voice_with_agent(self):
+        text = "The data was analyzed by the research team."
+        ss = self.rewriter.analyze(text)
+        passives = ss.by_category("passive_voice")
+        assert len(passives) >= 1
+        assert "the research team analyzed" in passives[0].suggested_text.lower()
+
+    def test_passive_voice_intro_phrase(self):
+        text = "It was demonstrated that the method works."
+        ss = self.rewriter.analyze(text)
+        passives = ss.by_category("passive_voice")
+        assert len(passives) >= 1
+        assert "demonstrate that" in passives[0].suggested_text.lower()
+
     def test_clean_text_no_suggestions(self):
         text = "The model achieves high accuracy on the benchmark dataset."
         ss = self.rewriter.analyze(text)
-        # This clean sentence should produce few or no actionable suggestions
-        # (maybe passive voice, but that's low confidence)
+        # This clean sentence should produce no high-confidence issues
         high_conf = [s for s in ss if s.confidence > 0.8]
-        assert len(high_conf) == 0, \
-            f"Clean text should not have high-confidence issues, got: " \
-            f"{[s.category for s in high_conf]}"
+        assert len(high_conf) == 0

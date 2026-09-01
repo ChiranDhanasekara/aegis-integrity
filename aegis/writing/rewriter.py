@@ -560,33 +560,84 @@ class AcademicRewriter:
 
     def _find_passive_voice(self, text: str) -> list[WritingSuggestion]:
         """
-        Detect passive voice constructions and suggest review.
-
-        Note: Passive voice is sometimes appropriate in academic writing
-        (e.g., Methods sections). Confidence is set lower to reflect this.
+        Detect passive voice constructions and generate actionable active-voice rewrites.
         """
         results = []
+
+        # 1. Passive with explicit agent: "X was analyzed by the authors" -> "the authors analyzed"
+        passive_by_pattern = re.compile(
+            r"\b(is|are|was|were|has been|have been|had been)\s+"
+            r"(\w+ed|shown|demonstrated|proposed|observed|found|performed|conducted|analyzed|evaluated|implemented|developed)\s+"
+            r"by\s+([A-Za-z0-9_\s]{2,30}?)(?=[,.;\n]|$)",
+            re.IGNORECASE,
+        )
+        by_matches_spans = []
+        for m in passive_by_pattern.finditer(text):
+            aux, verb, agent = m.group(1), m.group(2), m.group(3).strip()
+            active_verb = verb
+            suggested = f"{agent} {active_verb}"
+            results.append(WritingSuggestion(
+                category="passive_voice",
+                severity="info",
+                original_text=m.group(0),
+                suggested_text=suggested,
+                explanation=f"Convert passive construction with agent '{agent}' to direct active voice.",
+                start_offset=m.start(),
+                end_offset=m.end(),
+                confidence=0.82,
+                rule_source="active voice transformation",
+            ))
+            by_matches_spans.append((m.start(), m.end()))
+
+        # 2. Informative introductory passive patterns
+        intro_patterns = [
+            (r"\bit was demonstrated that\b", "the results demonstrate that", "Direct active construction"),
+            (r"\bit was observed that\b", "we observed that", "Direct active construction"),
+            (r"\bit was found that\b", "the findings indicate that", "Direct active construction"),
+            (r"\bit is shown in\s+(Figure\s+\d+|Table\s+\d+)\b", r"\1 shows", "Subject-verb active voice"),
+            (r"\bis shown in\s+(Figure\s+\d+|Table\s+\d+)\b", r"\1 shows", "Subject-verb active voice"),
+            (r"\bit has been demonstrated that\b", "prior research demonstrates that", "Direct active construction"),
+            (r"\bit should be noted that\b", "notably,", "Direct active expression"),
+        ]
+        for pat, repl, expl in intro_patterns:
+            for m in re.finditer(pat, text, re.IGNORECASE):
+                if any(s <= m.start() < e for s, e in by_matches_spans):
+                    continue
+                replacement = m.expand(repl) if "\\" in repl else repl
+                results.append(WritingSuggestion(
+                    category="passive_voice",
+                    severity="info",
+                    original_text=m.group(0),
+                    suggested_text=replacement,
+                    explanation=f"{expl}: replace passive '{m.group(0)}' with active phrasing.",
+                    start_offset=m.start(),
+                    end_offset=m.end(),
+                    confidence=0.85,
+                    rule_source="active voice transformation",
+                ))
+                by_matches_spans.append((m.start(), m.end()))
+
+        # 3. Standard passive verb pairs
         for m in _PASSIVE_RE.finditer(text):
-            # Expand match to the full sentence for context
-            sent_start = text.rfind(".", 0, m.start())
-            sent_start = sent_start + 1 if sent_start >= 0 else 0
-            sent_end = text.find(".", m.end())
-            sent_end = sent_end + 1 if sent_end >= 0 else len(text)
-            sentence = text[sent_start:sent_end].strip()
+            if any(s <= m.start() < e for s, e in by_matches_spans):
+                continue
+
+            aux = m.group(1).lower()
+            verb = m.group(2)
+            active_suggestion = f"we {verb}"
 
             results.append(WritingSuggestion(
                 category="passive_voice",
                 severity="info",
                 original_text=m.group(0),
-                suggested_text=m.group(0),  # No auto-fix for passive voice
-                explanation=f"Passive voice detected: \"{m.group(0)}\". "
-                            f"Consider rewriting in active voice for directness. "
-                            f"Context: \"{sentence[:120]}...\"",
+                suggested_text=active_suggestion,
+                explanation=f"Passive construction '{m.group(0)}': consider active voice (e.g. '{active_suggestion}' or '[Subject] {verb}') for directness.",
                 start_offset=m.start(),
                 end_offset=m.end(),
-                confidence=0.45,  # Low — passive is often fine in academia
+                confidence=0.75,
                 rule_source="academic writing style guide",
             ))
+
         return results
 
     def _find_long_sentences(self, text: str) -> list[WritingSuggestion]:
