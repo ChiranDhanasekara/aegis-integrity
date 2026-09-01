@@ -409,11 +409,24 @@ class ApplyPayload(BaseModel):
     suggestions: list[dict]
 
 
+UPLOAD_CACHE_DIR = Path(tempfile.gettempdir()) / "aegis_docx_cache"
+UPLOAD_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
 @app.post("/api/document/upload")
 async def api_upload_document(file: UploadFile = File(...)):
     """Parse an uploaded DOCX, PDF, or text file and run writing & clarity analysis."""
+    import uuid
+    doc_id = str(uuid.uuid4())
     suffix = Path(file.filename).suffix if file.filename else ".docx"
     content = await _read_upload_capped(file)
+    
+    # Cache original DOCX file for 100% style, layout, and table preservation during export
+    if suffix.lower() == ".docx":
+        cache_path = UPLOAD_CACHE_DIR / f"{doc_id}.docx"
+        with open(cache_path, "wb") as f_out:
+            f_out.write(content)
+
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(content)
         tmp_path = tmp.name
@@ -427,6 +440,7 @@ async def api_upload_document(file: UploadFile = File(...)):
         clarity = _clarity_engine.analyze(doc_text)
 
         return {
+            "doc_id": doc_id,
             "filename": file.filename,
             "text": doc_text,
             "word_count": parsed_doc.word_count,
@@ -502,6 +516,7 @@ def api_apply_suggestions(payload: ApplyPayload):
 
 class ExportDocxPayload(BaseModel):
     text: str
+    doc_id: Optional[str] = None
     base_text: Optional[str] = None
     doc_title: Optional[str] = "manuscript_edited.docx"
     tracked_changes: Optional[bool] = True
@@ -519,22 +534,50 @@ class ExportPdfPayload(BaseModel):
 
 @app.post("/api/export/docx")
 def api_export_docx(payload: ExportDocxPayload):
-    """Export document as DOCX with revisions / tracked changes."""
+    """Export document as DOCX with revisions / tracked changes in red text, preserving all original styles."""
     tmp_out = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
     tmp_out.close()
 
     try:
-        if payload.tracked_changes and payload.suggestions:
+        cached_orig = UPLOAD_CACHE_DIR / f"{payload.doc_id}.docx" if payload.doc_id else None
+        
+        if cached_orig and cached_orig.exists():
+            # 100% Original Style & Table Preservation: Load the exact uploaded DOCX file
+            exporter = DocxTrackedChangesExporter(cached_orig, author="AEGIS Writing Assistant")
+            
+            sug_list = []
+            accepted_set = set(payload.accepted_ids or [])
+            if payload.suggestions:
+                for s_dict in payload.suggestions:
+                    try:
+                        sug = WritingSuggestion(
+                            id=s_dict.get("id"),
+                            category=s_dict.get("category", "grammar"),
+                            severity=s_dict.get("severity", "info"),
+                            original_text=s_dict.get("original_text", ""),
+                            suggested_text=s_dict.get("suggested_text", ""),
+                            explanation=s_dict.get("explanation", ""),
+                            start_offset=s_dict.get("start_offset", 0),
+                            end_offset=s_dict.get("end_offset", 0),
+                            confidence=s_dict.get("confidence", 0.8),
+                        )
+                        if not accepted_set or sug.id in accepted_set:
+                            sug.accept()
+                        sug_list.append(sug)
+                    except Exception:
+                        continue
+                exporter.apply_tracked_suggestions(sug_list)
+            exporter.save(tmp_out.name)
+        elif payload.tracked_changes and payload.suggestions:
             exporter = DocxTrackedChangesExporter(author="AEGIS Writing Assistant")
             # Build initial doc with original/base paragraphs
             source = payload.base_text if payload.base_text and payload.base_text.strip() else payload.text
-            # Split paragraphs cleanly by double or single newlines
             raw_paras = source.split("\n\n") if "\n\n" in source else source.splitlines()
             for para in raw_paras:
                 if para.strip():
                     exporter.document.add_paragraph(para.strip())
             
-            # Apply tracked suggestions
+            # Apply tracked suggestions in red text
             sug_list = []
             accepted_set = set(payload.accepted_ids or [])
             for s_dict in payload.suggestions:
@@ -550,7 +593,6 @@ def api_export_docx(payload: ExportDocxPayload):
                         end_offset=s_dict.get("end_offset", 0),
                         confidence=s_dict.get("confidence", 0.8),
                     )
-                    # If accepted_set is specified, only apply accepted; if no set, apply all
                     if not accepted_set or sug.id in accepted_set:
                         sug.accept()
                     sug_list.append(sug)

@@ -5,6 +5,7 @@
 // Application State Store
 const state = {
   currentView: 'dashboard',
+  docId: null,
   originalText: '',
   documentText: '',
   documentTitle: 'Untitled Document',
@@ -222,6 +223,7 @@ async function uploadAndAnalyzeFile(file) {
     const data = await response.json();
     updateAnalysisProgress(100, 'Analysis complete!', 4);
 
+    state.docId = data.doc_id || null;
     state.originalText = data.text || '';
     state.documentText = data.text || '';
     state.suggestions = data.suggestions || [];
@@ -578,6 +580,7 @@ async function exportEditedDocx(withTrackedChanges = true) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        doc_id: state.docId,
         text: state.documentText,
         base_text: state.originalText || state.documentText,
         doc_title: state.documentTitle.endsWith('.docx') ? state.documentTitle : `${state.documentTitle}.docx`,
